@@ -15,6 +15,17 @@ contextBridge.exposeInMainWorld('tempo', {
     now: () => ipcRenderer.invoke('events:next'),
     onChanged: on('events:changed'),
   },
+  habits: {
+    list: () => ipcRenderer.invoke('habits:list'),
+    day: (date) => ipcRenderer.invoke('habits:day', date),
+    range: (from, to) => ipcRenderer.invoke('habits:range', from, to),
+    log: (date, id, patch) => ipcRenderer.invoke('habits:log', date, id, patch),
+    save: (habit) => ipcRenderer.invoke('habits:save', habit),
+    remove: (id) => ipcRenderer.invoke('habits:remove', id),
+    reorder: (ids) => ipcRenderer.invoke('habits:reorder', ids),
+    stats: (end, days) => ipcRenderer.invoke('habits:stats', end, days),
+    onChanged: on('habits:changed'),
+  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch) => ipcRenderer.invoke('settings:set', patch),

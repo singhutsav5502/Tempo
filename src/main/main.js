@@ -6,6 +6,7 @@ const google = require('./google');
 const blocker = require('./blocker');
 const ai = require('./ai');
 const stt = require('./stt');
+const habits = require('./habits');
 
 const R = (...p) => path.join(__dirname, '..', 'renderer', ...p);
 const PRELOAD = path.join(__dirname, 'preload.js');
@@ -210,6 +211,15 @@ function registerIpc() {
   ipcMain.handle('events:remove', (_e, id, scope) => events.remove(id, scope));
   ipcMain.handle('events:next', () => ({ active: events.activeAt(), next: events.nextAfter() }));
 
+  ipcMain.handle('habits:list', () => habits.list());
+  ipcMain.handle('habits:day', (_e, date) => habits.day(date));
+  ipcMain.handle('habits:range', (_e, from, to) => habits.range(from, to));
+  ipcMain.handle('habits:log', (_e, date, id, patch) => habits.logEntry(date, id, patch));
+  ipcMain.handle('habits:save', (_e, habit) => habits.save(habit));
+  ipcMain.handle('habits:remove', (_e, id) => habits.remove(id));
+  ipcMain.handle('habits:reorder', (_e, ids) => habits.reorder(ids));
+  ipcMain.handle('habits:stats', (_e, end, days) => habits.stats(end, days));
+
   ipcMain.handle('settings:get', publicSettings);
   ipcMain.handle('settings:set', (_e, patch) => {
     const s = store.get();
@@ -252,6 +262,7 @@ function registerIpc() {
 }
 
 events.bus.on('changed', () => broadcast('events:changed'));
+habits.bus.on('changed', () => broadcast('habits:changed'));
 nativeTheme.on('updated', () => { if (mainWin) mainWin.setTitleBarOverlay(overlay()); });
 
 // ---- lifecycle ------------------------------------------------------------

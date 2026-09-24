@@ -6,6 +6,7 @@ const SUGGESTIONS = [
   "What's on my calendar today?",
   'Block 2 hours of deep work tomorrow morning',
   'Find me a free 45 minutes this week',
+  'I did gym and ate 1450 calories today',
 ];
 
 let types = [];
@@ -266,8 +267,74 @@ function endVoice(input) {
 
 // Hotkey / mic button: start listening, or, if already listening, stop and use what was heard.
 function toggleListening() {
+  if (tab !== 'chat') setTab('chat'); // voice always talks to the chat
   if (voiceState === 'listening' && voice) voice.finish();
   else startListening();
+}
+
+// ---- today tab (daily habit sheet) ---------------------------------------------------------------
+
+const localYmd = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+let tab = 'chat';
+
+function setTab(name) {
+  tab = name;
+  document.body.classList.toggle('tab-today', name === 'today');
+  document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
+  $('#today').hidden = name !== 'today';
+  if (name === 'today') renderToday(); else if (open) $('#input').focus();
+}
+
+async function logHabit(id, patch) {
+  try { await tempo.habits.log(localYmd(), id, patch); } catch (err) { /* shown by the main window; keep the widget quiet */ }
+  renderToday();
+}
+
+async function renderToday() {
+  const rows = await tempo.habits.day(localYmd());
+  const due = rows.filter((r) => r.scheduled);
+  const done = due.filter((r) => r.status === 'done').length;
+  $('#today-count').textContent = due.length ? `${done}/${due.length}` : '';
+  if (tab !== 'today') return;
+
+  const box = $('#today');
+  const scroll = box.scrollTop;
+  const goal = (hb) => (hb.kind === 'number' && hb.target != null ? `${hb.direction === 'atmost' ? '≤' : '≥'} ${hb.target}${hb.unit ? ` ${hb.unit}` : ''}` : '');
+  const list = rows.map(({ habit, entry, status, scheduled }) => {
+    const manual = !!entry?.manual;
+    const btn = (kind, label, target) => {
+      const b = el('button', `tbtn ${kind}${status === target ? ' on' : ''}${status === target && !manual ? ' auto' : ''}`, label);
+      b.onclick = () => logHabit(habit.id, { status: entry?.manual && entry.status === target ? null : target });
+      return b;
+    };
+    const row = el('div', `trow${status ? ` ${status}` : ''}${scheduled ? '' : ' rest'}`);
+    row.style.setProperty('--c', habit.color);
+    const name = el('div', 'tname');
+    name.append(el('b', '', habit.name));
+    const sub = [goal(habit), !scheduled && 'rest day'].filter(Boolean).join(' · ');
+    if (sub) name.append(el('small', '', sub));
+    row.append(name);
+    if (habit.kind === 'number') {
+      const step = habit.target != null && habit.target >= 100 ? 50 : 1;
+      const input = el('input'); input.type = 'number'; input.step = 'any'; input.min = '0';
+      input.placeholder = habit.target != null ? String(habit.target) : '0';
+      input.value = entry?.value ?? '';
+      input.onchange = () => logHabit(habit.id, { value: input.value === '' ? null : Number(input.value) });
+      const minus = el('button', 'step', '−'); minus.onclick = () => logHabit(habit.id, { value: Math.max(0, (entry?.value ?? 0) - step) });
+      const plus = el('button', 'step', '+'); plus.onclick = () => logHabit(habit.id, { value: (entry?.value ?? 0) + step });
+      const num = el('div', 'tnum'); num.append(minus, input, plus);
+      row.append(num);
+    }
+    row.append(btn('cross', '✕', 'missed'), btn('tick', '✓', 'done'));
+    return row;
+  });
+
+  const head = el('div', 'tsum');
+  const big = el('b', '', `${done}`); const of = el('span', '', ` / ${due.length} done today`);
+  const left = el('div'); left.append(big, of); head.append(left);
+  const prog = el('div', 'tprog'); const fill = el('i'); fill.style.width = `${due.length ? (done / due.length) * 100 : 0}%`; prog.append(fill);
+  box.replaceChildren(head, prog, ...(list.length ? list : [el('div', 'tempty', 'No habits yet. Add some in the main window (checklist icon).')]));
+  box.scrollTop = scroll;
 }
 
 // ---- wiring ---------------------------------------------------------------------
@@ -279,6 +346,7 @@ function setOpen(v) {
   if (v) { $('#input').focus(); scrollDown(); }
 }
 
+document.querySelectorAll('.tab').forEach((b) => { b.onclick = () => setTab(b.dataset.tab); });
 $('#chat-btn').onclick = () => tempo.widget.setOpen(!open);
 $('#collapse').onclick = () => { voice?.cancel(); tempo.widget.setOpen(false); };
 $('#mic').onclick = toggleListening;
@@ -296,6 +364,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 tempo.widget.onOpen(setOpen);
+tempo.habits.onChanged(() => { if (!document.activeElement?.matches?.('#today input')) renderToday(); });
 tempo.voice.onHotkey(toggleListening);
 tempo.stt.onStatus((st) => { modelStatus = st.phase === 'ready' ? null : st; if (voiceState !== 'idle') showVoiceStatus(voiceState === 'listening' ? 'Listening… say what to schedule' : 'Transcribing…'); });
 tempo.events.onChanged(refreshPill);
@@ -303,6 +372,8 @@ tempo.blocker.onState((b) => { blocker = b; renderBanner(); refreshPill(); });
 
 (async function boot() {
   showEmpty();
+  renderToday();
+  setInterval(renderToday, 60000); // also rolls the sheet over at midnight
   blocker = await tempo.blocker.state();
   renderBanner();
   await refreshPill();

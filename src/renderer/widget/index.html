@@ -11,10 +11,14 @@
   <div id="root">
     <section id="panel">
       <header class="panel-head">
-        <span class="title">Ask Tempo</span>
+        <div class="tabs">
+          <button class="tab on" data-tab="chat">Chat</button>
+          <button class="tab" data-tab="today">Today <span id="today-count"></span></button>
+        </div>
         <button class="icon-btn" id="new-chat" title="New chat"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg></button>
         <button class="icon-btn" id="collapse" title="Minimize (Esc)"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" /></svg></button>
       </header>
+      <div id="today" hidden></div>
       <div id="banner" hidden></div>
       <div id="msgs"></div>
       <div id="voice-status" hidden></div>

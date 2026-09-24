@@ -9,6 +9,8 @@ const MAX_CUSTOM_DAYS = 14;
 const TIME_GRID_VIEWS = ['day', 'week', 'custom'];
 
 const state = {
+  page: 'calendar', // 'calendar' | 'sheet'
+  sheetDate: startOfDay(new Date()),
   view: 'week',
   anchor: startOfDay(new Date()),
   custom: { start: startOfDay(new Date()), days: 5 },
@@ -73,6 +75,7 @@ function viewRange() {
 }
 
 function step(dir) {
+  if (state.page === 'sheet') { state.sheetDate = addDays(state.sheetDate, dir); applyPage(); renderSheet(); return; }
   const a = state.anchor;
   if (state.view === 'day') state.anchor = addDays(a, dir);
   else if (state.view === 'week') state.anchor = addDays(a, 7 * dir);
@@ -126,7 +129,29 @@ async function loadEvents() {
 
 // ---- rendering ----------------------------------------------------------------
 
+// Calendar <-> daily sheet. In the sheet, the top bar's arrows/Today move through days instead of calendar ranges.
+function applyPage() {
+  const sheet = state.page === 'sheet';
+  $('#cal').hidden = sheet;
+  $('#sheet').hidden = !sheet;
+  $('#view-seg').hidden = sheet;
+  $('#sheet-btn').classList.toggle('on', sheet);
+  if (sheet) {
+    $('#custom-range').hidden = true;
+    $('#range-label').hidden = false;
+    $('#range-label').textContent = sheetLabel();
+  }
+}
+
+function setPage(page) {
+  state.page = page;
+  applyPage();
+  if (page === 'sheet') renderSheet(); else loadEvents();
+}
+
 function render() {
+  applyPage();
+  if (state.page === 'sheet') { renderSheet(); renderChips(); return; }
   const timeGrid = TIME_GRID_VIEWS.includes(state.view);
   for (const id of ['#cal-head', '#allday', '#cal-scroll']) $(id).hidden = !timeGrid;
   $('#month').hidden = state.view !== 'month';
@@ -620,8 +645,10 @@ function drawSettings() {
 function initChrome() {
   $('#prev').onclick = () => step(-1);
   $('#next').onclick = () => step(1);
+  $('#sheet-btn').onclick = () => setPage(state.page === 'sheet' ? 'calendar' : 'sheet');
   $('#today').onclick = () => {
     const today = startOfDay(new Date());
+    if (state.page === 'sheet') { state.sheetDate = today; applyPage(); renderSheet(); return; }
     state.anchor = today;
     if (state.view === 'custom') state.custom = { ...state.custom, start: today };
     savePrefs();
@@ -641,6 +668,8 @@ function initChrome() {
     if (e.key === 'ArrowLeft') step(-1);
     else if (e.key === 'ArrowRight') step(1);
     else if (e.key === 't') $('#today').click();
+    else if (e.key === 's') $('#sheet-btn').click();
+    else if (state.page === 'sheet') return;
     else { const v = { d: 'day', w: 'week', m: 'month', y: 'year', c: 'custom' }[e.key]; if (v) setView(v); }
   });
   window.addEventListener('resize', () => { if (state.view === 'month') renderMonth(); });
@@ -671,6 +700,8 @@ async function main() {
   tempo.events.onChanged(async () => { state.settings = await tempo.settings.get(); loadEvents(); });
   tempo.google.onState((g) => { state.google = g; renderChips(); if (!$('#drawer').hidden) drawSettings(); });
   tempo.blocker.onState((b) => { state.blocker = b; renderChips(); });
+  // Repaint the sheet when habits change elsewhere (e.g. the widget or the assistant), but never under someone's cursor.
+  tempo.habits.onChanged(() => { if (state.page === 'sheet' && !document.activeElement?.matches?.('#sheet input')) renderSheet(); });
   tempo.onError((m) => toast(m));
   setInterval(() => { updateNowLine(); renderChips(); }, 30000);
 }

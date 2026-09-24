@@ -13,6 +13,16 @@ const DEFAULT_TYPES = [
   { id: 'personal', name: 'Personal', color: '#c58af9', apps: [], sites: [] },
 ];
 
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const DEFAULT_HABITS = [
+  { id: 'gym', name: 'Gym', kind: 'check', days: ALL_DAYS, color: '#f2a65a', category: 'fitness' },
+  { id: 'badminton', name: 'Badminton', kind: 'check', days: ALL_DAYS, color: '#5cc8a1', category: 'fitness' },
+  { id: 'leetcode', name: 'LeetCode', kind: 'number', target: 1, direction: 'atleast', unit: 'problems', days: ALL_DAYS, color: '#7c93ff', category: 'coding' },
+  { id: 'hobby', name: 'Hobby', kind: 'check', days: ALL_DAYS, color: '#c58af9', category: 'hobby' },
+  { id: 'calories', name: 'Calories', kind: 'number', target: 1600, direction: 'atmost', unit: 'kcal', days: ALL_DAYS, color: '#ff6b6b', category: 'nutrition' },
+].map((h) => ({ ...h, created: today() }));
+
 const DEFAULTS = {
   settings: {
     provider: 'claude-code',
@@ -30,6 +40,8 @@ const DEFAULTS = {
     hotkeyCalendar: 'Control+Alt+C',
   },
   types: DEFAULT_TYPES,
+  habits: DEFAULT_HABITS,
+  habitLog: {},
   events: [],
   widget: { x: null, y: null },
   secrets: {},

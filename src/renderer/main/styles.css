@@ -165,3 +165,73 @@ input.hotkey:focus { border-color: var(--accent); color: var(--accent); }
 .yday[data-l='3'] { background: color-mix(in srgb, var(--accent) 50%, transparent); }
 .yday[data-l='4'] { background: color-mix(in srgb, var(--accent) 70%, transparent); color: var(--accent-ink); font-weight: 600; }
 .yday.today { box-shadow: inset 0 0 0 2px var(--accent); font-weight: 700; }
+
+/* ---- daily sheet ---- */
+#sheet-btn.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+#sheet { flex: 1; min-height: 0; overflow-y: auto; }
+.sheet-inner { max-width: 940px; margin: 0 auto; padding: 24px 24px 60px; display: flex; flex-direction: column; gap: 22px; }
+.ssum-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.ssum .big { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; }
+.ssum .of { color: var(--muted); font-size: 16px; }
+.sprog { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.sprog i { display: block; height: 100%; background: var(--ok); border-radius: 999px; transition: width 0.3s; }
+
+.hlist { display: flex; flex-direction: column; gap: 8px; }
+.hrow { display: grid; grid-template-columns: 5px 1fr auto; grid-template-areas: 'dot main ctl' 'dot note note'; column-gap: 14px; row-gap: 2px; align-items: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 11px 14px 9px 0; overflow: hidden; transition: background 0.15s; }
+.hdot { grid-area: dot; align-self: stretch; margin: -11px 0 -9px; background: var(--c); }
+.hmain { grid-area: main; min-width: 0; }
+.hctl { grid-area: ctl; display: flex; align-items: center; gap: 8px; }
+.hrow.done { background: color-mix(in srgb, var(--ok) 9%, var(--surface)); }
+.hrow.missed { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+.hrow.skip { opacity: 0.7; }
+.hrow.rest { opacity: 0.55; }
+.hname { font-weight: 600; font-size: 15px; }
+.hmeta { color: var(--muted); font-size: 12px; }
+.hmeta:empty { display: none; }
+.hbarfill { height: 4px; border-radius: 999px; background: var(--surface-2); margin-top: 6px; overflow: hidden; max-width: 360px; }
+.hbarfill i { display: block; height: 100%; background: var(--c); transition: width 0.25s; }
+.hbarfill.over i { background: var(--danger); }
+.tick, .cross { width: 38px; height: 38px; border-radius: 11px; border: 1.5px solid var(--border-strong); background: transparent; color: var(--muted); font-size: 17px; line-height: 1; }
+.tick:hover { border-color: var(--ok); color: var(--ok); }
+.cross:hover { border-color: var(--danger); color: var(--danger); }
+.tick.on { background: var(--ok); border-color: var(--ok); color: #0e0f13; }
+.cross.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+.tick.auto, .cross.auto { opacity: 0.65; }
+.numctl { display: flex; align-items: center; gap: 4px; margin-right: 6px; }
+.hnum { width: 88px; text-align: center; font-weight: 600; font-size: 14px; }
+input[type='number'].hnum::-webkit-inner-spin-button { display: none; }
+.step { width: 28px; height: 32px; border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--muted); }
+.step:hover { background: var(--surface-2); color: var(--text); }
+.unit { color: var(--muted); font-size: 12px; margin-left: 4px; min-width: 40px; }
+.hnote { grid-area: note; display: none; width: 100%; margin-top: 4px; padding: 5px 9px; font-size: 12px; }
+.hrow.noting .hnote, .hnote.has { display: block; }
+.notebtn { width: 30px; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--faint); font-size: 14px; }
+.notebtn:hover, .hrow.noting .notebtn { background: var(--surface-2); color: var(--text); }
+
+.matrix .mgrid2 { overflow-x: auto; padding-bottom: 4px; }
+.mrow { display: grid; grid-template-columns: 130px repeat(14, minmax(32px, 1fr)) 40px 40px 46px; align-items: center; gap: 3px; margin-bottom: 3px; min-width: 760px; }
+.mlabel { display: flex; align-items: center; gap: 8px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mlabel i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.mday { text-align: center; font-size: 10px; color: var(--faint); display: flex; flex-direction: column; line-height: 1.2; padding: 2px 0; border-radius: 6px; }
+.mday b { font-size: 12px; color: var(--muted); font-weight: 600; }
+.mday.today b { color: var(--accent); }
+.mday.sel { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.mc { height: 32px; border: 0; border-radius: 8px; background: var(--surface-2); color: var(--faint); font-size: 14px; padding: 0; }
+.mc:hover { filter: brightness(1.12); }
+.mc.done { background: color-mix(in srgb, var(--ok) 30%, transparent); color: var(--ok); font-weight: 700; }
+.mc.missed { background: color-mix(in srgb, var(--danger) 24%, transparent); color: var(--danger); font-weight: 700; }
+.mc.skip { color: var(--muted); }
+.mc.off { opacity: 0.35; }
+.mc.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+.mv { font-size: 10px; font-weight: 700; }
+.mstat { text-align: center; font-size: 12px; color: var(--muted); }
+.mhead-row .mstat { font-size: 11px; color: var(--faint); }
+
+.habit-editor { width: 600px; max-height: calc(100vh - 80px); overflow-y: auto; }
+.hcards { display: flex; flex-direction: column; }
+.hcards .type-card { border-left: 3px solid var(--c); }
+.hcards .head .icon-btn { flex: none; width: 28px; }
+.dayrow { display: flex; gap: 4px; flex: none !important; }
+.daybtn { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border-strong); background: transparent; font-size: 12px; padding: 0; }
+.daybtn.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }

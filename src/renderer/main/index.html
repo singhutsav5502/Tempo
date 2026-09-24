@@ -30,6 +30,9 @@
       <div class="spacer"></div>
       <div id="block-chip" hidden></div>
       <button id="sync-chip" class="chip" title="Sync with Google Calendar"></button>
+      <button class="icon-btn" id="sheet-btn" title="Daily sheet (s)">
+        <svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" /><path d="M3.5 6.5l1.5 1.5 2.5-3M3.5 12.5l1.5 1.5 2.5-3M3.5 18.5l1.5 1.5 2.5-3" /></svg>
+      </button>
       <button class="icon-btn" id="settings-btn" title="Settings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
       </button>
@@ -42,6 +45,7 @@
       <div id="month" hidden></div>
       <div id="year" hidden></div>
     </section>
+    <section id="sheet" hidden></section>
   </div>
 
   <aside id="drawer" hidden></aside>
@@ -49,6 +53,7 @@
   <div id="toast" hidden></div>
 
   <script src="views.js"></script>
+  <script src="sheet.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

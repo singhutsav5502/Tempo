@@ -18,6 +18,24 @@ Hotkeys (changeable in Settings): **Ctrl+Alt+T** opens the chat and starts **lis
 3. **Website blocking**: click *Enable website blocking* once. It shows a single UAC prompt that lets your user edit
    the hosts file; Tempo itself never runs elevated.
 
+## Daily sheet (habits)
+
+The checklist icon in the top bar (or press `s`) opens your daily sheet. It ships with Gym, Badminton, LeetCode,
+Hobby and Calories; **Edit habits** lets you rename, recolor, reorder, add and remove them.
+
+- **Tick / cross** habits are simply done or not.
+- **Number** habits have a goal: *at least* (LeetCode ≥ 1 problem) or *at most* (Calories ≤ 1600 kcal). Type the
+  actual number (or use −/+) and the tick or cross is worked out for you. You can still override it by hand; click
+  the button again to go back to automatic.
+- Each habit can be limited to certain weekdays (rest days don't count), has a category (fitness, coding, hobby,
+  nutrition, ...) and takes an optional note (✎).
+- The sheet shows a 14-day matrix with streaks, best streak and 30-day completion. Use ◀ ▶ to fill in past days.
+- The widget has a **Today** tab for one-click check-offs, and the chat understands it: *"did gym, ate 1450 calories,
+  skipped badminton"* or *"start tracking reading, at least 20 pages a day"*.
+
+Data lives in `tempo.json` as `habits` (definitions) and `habitLog` (`date -> habitId -> {status, value, note}`);
+removing a habit only archives it, so history stays available for analytics.
+
 ## Views
 
 **Day, Week, Month, Year and Custom** (top bar, or press `d` `w` `m` `y` `c`; `←` `→` navigate, `t` jumps to today).
