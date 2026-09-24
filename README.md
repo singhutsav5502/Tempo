@@ -8,7 +8,13 @@ synced with Google Calendar, and **blocks** that close distracting apps and webs
 
 Hotkeys (changeable in Settings): **Ctrl+Alt+T** opens the chat and starts **listening**, **Ctrl+Alt+C** toggles the calendar. The tray icon toggles the chat. Drag the pill to move it.
 
-## Setup (Settings, gear icon top-right)
+## Setup
+
+On first launch a short guided setup walks through the assistant, your goals, what Focus time blocks (pick from
+the apps you have open) and, optionally, Google Calendar (load the `client_secret.json` you download). Run it again from
+Settings. Press `?` anywhere in the calendar for all shortcuts.
+
+### Manual setup (Settings, gear icon top-right)
 
 1. **Assistant**: by default Tempo runs your installed **Claude Code** in the background, so your Claude login is all
    you need (Sonnet by default, Opus optional). Or switch to an **Anthropic API key** in Settings.

@@ -33,6 +33,7 @@ const DEFAULTS = {
     overrideMinutes: 5,
     warnSeconds: 10,
     launchAtStartup: false,
+    onboarded: false,
     dayStartHour: 0,
     dayEndHour: 24,
     goalsMorning: '09:00',

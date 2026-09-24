@@ -16,13 +16,13 @@
   </style>
 </head>
 <body>
-  <div id="card">
+  <div id="card" role="alertdialog" aria-live="assertive" aria-labelledby="msg" aria-describedby="sub">
     <div class="kicker" id="kicker">Blocked</div>
     <div class="msg" id="msg"></div>
     <div class="sub" id="sub"></div>
     <div class="btns">
-      <button class="btn" id="close">Close it now</button>
-      <button class="btn primary" id="allow">Allow</button>
+      <button class="btn" id="close" title="Close it now (C)">Close it now</button>
+      <button class="btn primary" id="allow" title="Allow for a few minutes (A)">Allow</button>
     </div>
     <div class="bar" id="bar"></div>
   </div>

@@ -26,6 +26,11 @@ contextBridge.exposeInMainWorld('tempo', {
     stats: (end, days) => ipcRenderer.invoke('habits:stats', end, days),
     onChanged: on('habits:changed'),
   },
+  apps: {
+    running: () => ipcRenderer.invoke('apps:running'),
+    names: (list) => ipcRenderer.invoke('apps:names', list),
+  },
+  ai: { detect: () => ipcRenderer.invoke('ai:detect') },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     set: (patch) => ipcRenderer.invoke('settings:set', patch),
@@ -35,6 +40,7 @@ contextBridge.exposeInMainWorld('tempo', {
     connect: () => ipcRenderer.invoke('google:connect'),
     disconnect: () => ipcRenderer.invoke('google:disconnect'),
     sync: () => ipcRenderer.invoke('google:sync'),
+    loadClientFile: () => ipcRenderer.invoke('google:load-client-file'),
     ensureRange: (from, to) => ipcRenderer.invoke('google:ensure-range', from, to),
     onState: on('google:state'),
   },

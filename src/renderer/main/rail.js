@@ -17,11 +17,11 @@ function blockingSummary() {
   const end = new Date(Math.min(...active.map((a) => Date.parse(a.end))));
   const box = GoalUI.el('div', 'rail-blocking');
   box.append(GoalUI.el('b', '', `Blocking until ${fmtTime(end)}`),
-    document.createTextNode(`${friendlyList(b.apps, 'apps')}${b.apps.length && b.sites.length ? ' · ' : ''}${friendlyList(b.sites, 'sites')}`));
+    document.createTextNode([friendlyList(b.appNames || b.apps), friendlyList(b.sites)].filter(Boolean).join(' · ')));
   return box;
 }
 
-const friendlyList = (items, noun) => (items.length ? `${items.length} ${noun}` : '');
+const friendlyList = (items) => (items.length > 3 ? `${items.slice(0, 3).join(', ')} +${items.length - 3} more` : items.join(', '));
 
 async function renderRail() {
   const rail = $('#rail');

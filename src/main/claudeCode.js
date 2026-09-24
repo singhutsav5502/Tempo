@@ -178,4 +178,8 @@ function stop() {
 
 const reset = () => stop(); // a fresh process is a fresh conversation
 
-module.exports = { chat, reset, stop };
+function available() {
+  try { findClaude(); return true; } catch { return false; }
+}
+
+module.exports = { chat, reset, stop, available };

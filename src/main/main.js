@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, globalShortcut, ipcMain, screen, shell, session, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, globalShortcut, ipcMain, screen, shell, session, Notification, dialog } = require('electron');
 const path = require('path');
 const store = require('./store');
 const events = require('./events');
@@ -8,6 +8,9 @@ const ai = require('./ai');
 const stt = require('./stt');
 const habits = require('./habits');
 const reminders = require('./reminders');
+const apps = require('./apps');
+const claudeCode = require('./claudeCode');
+const fs = require('fs');
 
 const R = (...p) => path.join(__dirname, '..', 'renderer', ...p);
 const PRELOAD = path.join(__dirname, 'preload.js');
@@ -282,6 +285,25 @@ function registerIpc() {
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!s.settings.launchAtStartup });
     events.changed(false); // re-evaluates blocking and refreshes both windows
     return publicSettings();
+  });
+
+  ipcMain.handle('apps:running', () => apps.running());
+  ipcMain.handle('apps:names', (_e, list) => (list || []).map(apps.friendlyName));
+  ipcMain.handle('ai:detect', () => ({ claudeCode: claudeCode.available() }));
+
+  // The person picks the credentials file they downloaded from Google Cloud; only its client id/secret are kept.
+  ipcMain.handle('google:load-client-file', async () => {
+    const res = await dialog.showOpenDialog(mainWin, { title: 'Choose the client_secret JSON from Google Cloud', filters: [{ name: 'JSON', extensions: ['json'] }], properties: ['openFile'] });
+    if (res.canceled || !res.filePaths[0]) return { ok: false, canceled: true };
+    let json;
+    try { json = JSON.parse(fs.readFileSync(res.filePaths[0], 'utf8')); } catch { return { ok: false, error: "That file isn't valid JSON." }; }
+    if (json.web && !json.installed) return { ok: false, error: 'This is a "Web application" client. Create an OAuth client of type "Desktop app" and download that one.' };
+    const c = json.installed;
+    if (!c || !c.client_id || !c.client_secret) return { ok: false, error: "That doesn't look like a Google OAuth client file (no client_id / client_secret)." };
+    store.get().settings.googleClientId = c.client_id;
+    store.setSecret('googleClientSecret', c.client_secret);
+    store.save();
+    return { ok: true, state: google.getState() };
   });
 
   ipcMain.handle('google:state', () => google.getState());

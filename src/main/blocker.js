@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const store = require('./store');
 const events = require('./events');
+const apps = require('./apps');
 
 const HOSTS = process.env.TEMPO_HOSTS_FILE || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'drivers', 'etc', 'hosts');
 const BEGIN = '# >>> TEMPO BLOCK (managed automatically, do not edit) >>>';
@@ -134,6 +135,7 @@ function snapshot(now = Date.now()) {
   return {
     active: current.active.map((e) => ({ id: e.id, title: e.title, type: e.type, end: e.end })),
     apps: [...current.apps.keys()],
+    appNames: [...new Set([...current.apps.keys()].map(apps.friendlyName))],
     sites: [...current.sites],
     overridesLeft: overridesLeft(),
     strict: cfg().overridesPerBlock === 0,
@@ -192,7 +194,7 @@ function alertPayload(p) {
   return {
     id: p.id,
     exe: p.exe,
-    label: p.exe.replace(/\.exe$/i, ''),
+    label: apps.friendlyName(p.exe),
     blockName: p.blockName,
     deadline: p.deadline,
     canOverride: overridesLeft() > 0,

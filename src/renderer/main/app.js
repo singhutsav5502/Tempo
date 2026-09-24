@@ -254,6 +254,7 @@ function renderTimeGrid() {
   });
   grid.replaceChildren(gutter, ...cols);
   updateNowLine();
+  requestAnimationFrame(updateEdgeMarkers);
 }
 
 // Clip events to the day and pack overlaps into side-by-side lanes.
@@ -493,8 +494,15 @@ function openEditor(existing, draft) {
         onclick: () => { type = t.id; drawChips(); },
       }, h('i'), t.name)));
     const t = typeById(type);
-    const n = t ? t.apps.length + t.sites.length : 0;
-    hint.textContent = t ? (n ? `While this is on, ${t.apps.length} apps and ${t.sites.length} sites are blocked.` : 'Nothing is blocked for this type.') : '';
+    if (!t) { hint.textContent = 'Pick a type to block distractions while this event is on.'; return; }
+    if (!t.apps.length && !t.sites.length) { hint.textContent = `${t.name} doesn't block anything. Change that in Settings.`; return; }
+    hint.textContent = '';
+    tempo.apps.names(t.apps).then((names) => {
+      if (typeById(type) !== t) return; // changed while we were looking names up
+      const list = (xs, max = 3) => (xs.length > max ? `${xs.slice(0, max).join(', ')} +${xs.length - max} more` : xs.join(', '));
+      const uniq = [...new Set(names)];
+      hint.textContent = `While this is on: ${[uniq.length && `closes ${list(uniq)}`, t.sites.length && `blocks ${list(t.sites)}`].filter(Boolean).join(' · ')}.`;
+    });
   };
   drawChips();
 
@@ -534,7 +542,10 @@ function openEditor(existing, draft) {
 
   const modal = h('div', { class: 'modal', onkeydown: (e) => { if ((e.key === 'Enter' && e.target.tagName === 'INPUT') || (e.key === 'Enter' && e.ctrlKey)) save(); if (e.key === 'Escape') closeModal(); } },
     title,
-    h('div', { class: 'row' }, date, from, to),
+    h('div', { class: 'row' },
+      h('label', { class: 'fld' }, h('span', {}, 'Date'), date),
+      h('label', { class: 'fld' }, h('span', {}, 'Starts'), from),
+      h('label', { class: 'fld' }, h('span', {}, 'Ends'), to)),
     existing
       ? existing.recurring && h('div', { class: 'hint', style: 'margin:0' }, `↻ ${existing.recurrenceText || 'Repeating event'}`)
       : h('div', {}, h('div', { class: 'lbl' }, 'Repeat'), repeatRow),
@@ -543,7 +554,11 @@ function openEditor(existing, draft) {
     h('div', { class: 'actions' },
       existing && h('button', { class: 'btn danger left', onclick: remove }, 'Delete'),
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
+      h('span', { class: 'keyhint' }, 'Enter to save · Esc to cancel'),
       h('button', { class: 'btn primary', onclick: save }, 'Save')));
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', existing ? `Edit ${existing.title}` : 'New event');
   openModal(modal);
   title.focus(); title.select();
 }
@@ -687,7 +702,8 @@ function drawSettings() {
       h('label', { class: 'check', style: 'margin-top:10px' }, h('input', { type: 'checkbox', checked: s.voiceAutoSend, onchange: (e) => saveSettings({ voiceAutoSend: e.target.checked }) }), 'Send voice commands automatically when I stop talking'),
       h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-top:14px' },
         hotkeyField('Ask Tempo (chat) hotkey', 'hotkeyChat'), hotkeyField('Open calendar hotkey', 'hotkeyCalendar')),
-      h('div', { class: 'hint', style: 'margin-top:-6px' }, 'Chat hotkey opens the chat and listens; press it again to send. Calendar hotkey toggles the calendar. Backspace clears one.')));
+      h('div', { class: 'hint', style: 'margin-top:-6px' }, 'Chat hotkey opens the chat and listens; press it again to send. Calendar hotkey toggles the calendar. Backspace clears one.'),
+      h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: 'btn', onclick: () => { $('#drawer').hidden = true; openWizard(); } }, 'Run setup again'), h('button', { class: 'btn', onclick: () => { $('#drawer').hidden = true; openShortcuts(); } }, 'Keyboard shortcuts'))));
   d.scrollTop = scroll;
 }
 
@@ -722,6 +738,8 @@ function initChrome() {
   };
   document.addEventListener('keydown', (e) => {
     if (e.target.matches('input, textarea, select') || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (document.querySelector('.wiz-scrim') || ($('#modal-root').children.length && e.key !== '?')) return; // dialogs own the keyboard
+    if (e.key === '?') { openShortcuts(); return; }
     if (e.key === 'ArrowLeft') step(-1);
     else if (e.key === 'ArrowRight') step(1);
     else if (e.key === 't') $('#today').click();
@@ -732,11 +750,30 @@ function initChrome() {
     else if (state.page === 'sheet') return;
     else { const v = { d: 'day', w: 'week', m: 'month', y: 'year', c: 'custom' }[e.key]; if (v) setView(v); }
   });
-  window.addEventListener('resize', () => { applyPage(); renderRail(); if (state.view === 'month') renderMonth(); });
+  window.addEventListener('resize', () => { applyPage(); renderRail(); if (state.view === 'month') renderMonth(); updateEdgeMarkers(); });
+  $('#cal-scroll').addEventListener('scroll', () => { cancelAnimationFrame(updateEdgeMarkers.raf); updateEdgeMarkers.raf = requestAnimationFrame(updateEdgeMarkers); });
   // Clicking outside the slide-over closes it.
   document.addEventListener('mousedown', (e) => {
     if (state.railOverlay && !e.target.closest?.('#rail, #goals-btn')) { state.railOverlay = false; refreshRailLayout(); }
   });
+}
+
+function openShortcuts() {
+  if (document.querySelector('.shortcuts')) { closeModal(); return; }
+  const s = state.settings;
+  const key = (k) => (k || '').replace('Control', 'Ctrl');
+  const rows = [
+    ['Anywhere', [[key(s.hotkeyChat), 'Talk to Tempo (press again to send)'], [key(s.hotkeyCalendar), 'Open or hide this window']]],
+    ['Calendar', [['n', 'New event'], ['d  w  m  y  c', 'Day, week, month, year, custom'], ['←  →', 'Previous / next'], ['t', 'Today'], ['g', 'Goals panel'], ['s', 'Full goals sheet'], ['?', 'This list']]],
+    ['Event editor', [['Enter', 'Save'], ['Ctrl + Enter', 'Save from the notes box'], ['Esc', 'Cancel']]],
+    ['With the mouse', [['Drag on empty time', 'Create an event'], ['Drag an event', 'Move it'], ['Drag its bottom edge', 'Resize it'], ['Drag a month chip', 'Move to another day']]],
+  ];
+  const box = h('div', { class: 'modal shortcuts', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Keyboard shortcuts', onkeydown: (e) => { if (e.key === 'Escape' || e.key === '?') closeModal(); } },
+    h('div', { class: 'row' }, h('b', { style: 'font-size:15px' }, 'Shortcuts'), h('button', { class: 'icon-btn', style: 'flex:none', 'aria-label': 'Close', onclick: closeModal }, '✕')),
+    rows.map(([group, items]) => h('div', {}, h('div', { class: 'lbl' }, group),
+      h('table', { class: 'wiz-keys' }, items.filter(([k]) => k).map(([k, v]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, v)))))));
+  openModal(box);
+  box.tabIndex = -1; box.focus();
 }
 
 function setView(view) {
@@ -745,10 +782,40 @@ function setView(view) {
   loadEvents().then(scrollToNow);
 }
 
+/** Scroll the time grid to what matters: the first event still ahead today (or now), keeping an hour of context. */
 function scrollToNow() {
   if (!TIME_GRID_VIEWS.includes(state.view)) return;
-  const now = new Date();
-  $('#cal-scroll').scrollTop = Math.max(0, (now.getHours() - 2 - H0()) * HOUR_H);
+  const now = Date.now();
+  const days = visibleDays();
+  const dayStart = (d) => d.getTime() + H0() * 3600000;
+  const today = days.find((d) => ymd(d) === ymd(new Date()));
+  let target;
+  if (today) {
+    const upcoming = state.events.filter((e) => !e.allDay && Date.parse(e.end) > now && ymd(new Date(e.start)) === ymd(today)).map((e) => Date.parse(e.start));
+    target = Math.min(now, ...upcoming) - 3600000;
+    target = (target - dayStart(today)) / 3600000;
+  } else {
+    // Another range: start at the earliest event in it, or 8 AM.
+    const hours = state.events.filter((e) => !e.allDay).map((e) => { const d = new Date(e.start); return d.getHours() + d.getMinutes() / 60; });
+    target = (hours.length ? Math.min(...hours) - 0.5 : 8) - H0();
+  }
+  $('#cal-scroll').scrollTop = Math.max(0, target * HOUR_H);
+  updateEdgeMarkers();
+}
+
+/** Per-day "▲ 2 earlier" / "▼ 1 later" markers for events scrolled out of view. Click to reveal them. */
+function updateEdgeMarkers() {
+  const sc = $('#cal-scroll');
+  if (!sc || sc.hidden) return;
+  const top = sc.scrollTop; const bottom = top + sc.clientHeight;
+  for (const col of document.querySelectorAll('#grid .col')) {
+    col.querySelectorAll('.edge').forEach((n) => n.remove());
+    const evs = [...col.querySelectorAll('.ev')];
+    const above = evs.filter((e) => e.offsetTop + e.offsetHeight <= top + 4);
+    const below = evs.filter((e) => e.offsetTop >= bottom - 4);
+    if (above.length) col.append(h('button', { class: 'edge up', style: `top:${top + 4}px`, 'aria-label': `${above.length} earlier event${above.length > 1 ? 's' : ''}`, onclick: () => { sc.scrollTo({ top: Math.max(0, Math.min(...above.map((e) => e.offsetTop)) - 12), behavior: 'smooth' }); } }, `▲ ${above.length} earlier`));
+    if (below.length) col.append(h('button', { class: 'edge down', style: `top:${bottom - 26}px`, 'aria-label': `${below.length} later event${below.length > 1 ? 's' : ''}`, onclick: () => { sc.scrollTo({ top: Math.min(...below.map((e) => e.offsetTop)) - 60, behavior: 'smooth' }); } }, `▼ ${below.length} later`));
+  }
 }
 
 async function main() {
@@ -762,6 +829,7 @@ async function main() {
   await loadEvents();
   renderRail();
   scrollToNow();
+  if (!state.settings.onboarded) openWizard();
 
   tempo.events.onChanged(async () => { state.settings = await tempo.settings.get(); loadEvents(); });
   tempo.google.onState((g) => { state.google = g; renderChips(); if (!$('#drawer').hidden) drawSettings(); });
