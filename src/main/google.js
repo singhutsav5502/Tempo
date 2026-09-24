@@ -8,13 +8,16 @@ const events = require('./events');
 
 const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 const API = 'https://www.googleapis.com/calendar/v3/calendars/primary';
+const DAY_MS = 86400000;
 const SYNC_PAST_DAYS = 30;
 const SYNC_FUTURE_DAYS = 120;
+const MAX_RANGE_YEARS = 3; // how far from today the month/year views may pull
 
 const status = new EventEmitter();
 let state = { connected: false, syncing: false, lastSync: null, error: null };
 let syncTimer = null;
 let syncing = false;
+let syncAgain = false;
 
 function setState(patch) {
   state = { ...state, ...patch };
@@ -98,6 +101,7 @@ function connect() {
 
 function disconnect() {
   store.setSecret('googleTokens', null);
+  store.get().coverage = undefined;
   // Drop the synced copies; a later reconnect re-pulls them. Local-only events stay.
   const s = store.get();
   s.events = s.events.filter((e) => !e.gid);
@@ -232,9 +236,32 @@ async function push() {
   }
 }
 
+/** The date range we keep in sync: the default window, widened to whatever the calendar views have asked for. */
+function coverage() {
+  const now = Date.now();
+  const cov = store.get().coverage || {};
+  return {
+    min: Math.min(now - SYNC_PAST_DAYS * DAY_MS, cov.min ?? Infinity),
+    max: Math.max(now + SYNC_FUTURE_DAYS * DAY_MS, cov.max ?? -Infinity),
+  };
+}
+
+/** Called when a view (month/year/custom range) needs dates beyond what is synced. Returns true if a sync was queued. */
+function ensureRange(fromMs, toMs) {
+  if (!store.hasSecret('googleTokens')) return false;
+  const now = Date.now();
+  const lo = Math.max(fromMs - 7 * DAY_MS, now - MAX_RANGE_YEARS * 365 * DAY_MS);
+  const hi = Math.min(toMs + 7 * DAY_MS, now + MAX_RANGE_YEARS * 365 * DAY_MS);
+  const cov = coverage();
+  if (lo >= cov.min && hi <= cov.max) return false;
+  store.get().coverage = { min: Math.min(cov.min, lo), max: Math.max(cov.max, hi) };
+  store.save();
+  scheduleSync();
+  return true;
+}
+
 async function pull() {
-  const min = Date.now() - SYNC_PAST_DAYS * 86400000;
-  const max = Date.now() + SYNC_FUTURE_DAYS * 86400000;
+  const { min, max } = coverage();
   const remote = [];
   let pageToken;
   do {
@@ -254,6 +281,7 @@ async function pull() {
     const next = fromGoogle(g, cur);
     if (cur) Object.assign(cur, next); else all.push(next);
   }
+  store.get().coverage = { min, max };
   // Series that Google now owns come back as expanded instances above; the local definition is no longer needed.
   events.seriesList().splice(0, Infinity, ...events.seriesList().filter((sr) => !sr.gid));
   // Synced events inside the window that no longer exist upstream were deleted in Google.
@@ -265,7 +293,8 @@ async function pull() {
 }
 
 async function sync() {
-  if (!store.hasSecret('googleTokens') || syncing) return;
+  if (!store.hasSecret('googleTokens')) return;
+  if (syncing) { syncAgain = true; return; }
   syncing = true;
   setState({ syncing: true });
   try {
@@ -277,6 +306,7 @@ async function sync() {
     setState({ syncing: false, error: err.message });
   } finally {
     syncing = false;
+    if (syncAgain) { syncAgain = false; scheduleSync(); }
   }
 }
 
@@ -291,4 +321,4 @@ function start() {
   sync();
 }
 
-module.exports = { start, connect, disconnect, sync, getState, status };
+module.exports = { start, connect, disconnect, sync, ensureRange, getState, status };

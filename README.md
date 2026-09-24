@@ -18,6 +18,18 @@ Hotkeys (changeable in Settings): **Ctrl+Alt+T** opens the chat and starts **lis
 3. **Website blocking**: click *Enable website blocking* once. It shows a single UAC prompt that lets your user edit
    the hosts file; Tempo itself never runs elevated.
 
+## Views
+
+**Day, Week, Month, Year and Custom** (top bar, or press `d` `w` `m` `y` `c`; `←` `→` navigate, `t` jumps to today).
+
+- **Month**: every event as a chip with its time; "+N more" opens that day; drag a chip to another day to move it.
+- **Year**: twelve mini-months shaded by how busy each day is; click a day or a month name to drill in.
+- **Custom**: pick any from/to dates (up to 14 days) shown as a time grid.
+- **Visible hours**: Settings → General trims the time grid, e.g. 8 AM to 8 PM.
+
+Month and year can look far beyond the default sync window, so Tempo pulls extra ranges from Google on demand
+(up to 3 years either side of today).
+
 ## Repeating events
 
 Pick **Repeat** when creating an event (every day / weekday / week / month / year, optional end date), or just say

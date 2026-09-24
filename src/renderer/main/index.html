@@ -17,9 +17,15 @@
         <button class="icon-btn" id="next" title="Next"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg></button>
         <div id="range-label"></div>
       </div>
+      <div id="custom-range" hidden>
+        <input type="date" id="c-from" title="From" /><span>–</span><input type="date" id="c-to" title="To (inclusive)" />
+      </div>
       <div class="seg" id="view-seg">
-        <button data-view="week">Week</button>
         <button data-view="day">Day</button>
+        <button data-view="week">Week</button>
+        <button data-view="month">Month</button>
+        <button data-view="year">Year</button>
+        <button data-view="custom">Custom</button>
       </div>
       <div class="spacer"></div>
       <div id="block-chip" hidden></div>
@@ -33,6 +39,8 @@
       <div id="cal-head"></div>
       <div id="allday"></div>
       <div id="cal-scroll"><div id="grid"></div></div>
+      <div id="month" hidden></div>
+      <div id="year" hidden></div>
     </section>
   </div>
 
@@ -40,6 +48,7 @@
   <div id="modal-root"></div>
   <div id="toast" hidden></div>
 
+  <script src="views.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

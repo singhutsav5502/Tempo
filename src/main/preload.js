@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('tempo', {
     connect: () => ipcRenderer.invoke('google:connect'),
     disconnect: () => ipcRenderer.invoke('google:disconnect'),
     sync: () => ipcRenderer.invoke('google:sync'),
+    ensureRange: (from, to) => ipcRenderer.invoke('google:ensure-range', from, to),
     onState: on('google:state'),
   },
   blocker: {

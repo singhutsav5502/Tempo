@@ -5,9 +5,13 @@ const SNAP = 15;
 const NO_TYPE_COLOR = '#8b90a0';
 const DAY = 86400000;
 
+const MAX_CUSTOM_DAYS = 14;
+const TIME_GRID_VIEWS = ['day', 'week', 'custom'];
+
 const state = {
   view: 'week',
   anchor: startOfDay(new Date()),
+  custom: { start: startOfDay(new Date()), days: 5 },
   events: [],
   settings: null,
   google: null,
@@ -44,7 +48,65 @@ const colorOf = (e) => typeById(e.type)?.color || NO_TYPE_COLOR;
 const blocksSomething = (e) => { const t = typeById(e.type); return !!t && (t.apps.length || t.sites.length); };
 
 function weekStart(d) { const x = startOfDay(d); const dow = (x.getDay() + 6) % 7; return addDays(x, -dow); }
-const visibleDays = () => state.view === 'day' ? [state.anchor] : Array.from({ length: 7 }, (_, i) => addDays(weekStart(state.anchor), i));
+// Visible hour window of the time grid (settings: dayStartHour / dayEndHour).
+const H0 = () => state.settings?.dayStartHour ?? 0;
+const H1 = () => state.settings?.dayEndHour ?? 24;
+
+function visibleDays() {
+  if (state.view === 'day') return [state.anchor];
+  if (state.view === 'custom') return Array.from({ length: state.custom.days }, (_, i) => addDays(state.custom.start, i));
+  return Array.from({ length: 7 }, (_, i) => addDays(weekStart(state.anchor), i));
+}
+
+const monthGridStart = () => weekStart(new Date(state.anchor.getFullYear(), state.anchor.getMonth(), 1));
+function monthRows() {
+  const y = state.anchor.getFullYear(); const m = state.anchor.getMonth();
+  return Math.ceil((((new Date(y, m, 1).getDay() + 6) % 7) + new Date(y, m + 1, 0).getDate()) / 7);
+}
+
+/** [start, end) of the dates the current view needs events for. */
+function viewRange() {
+  if (state.view === 'month') { const s = monthGridStart(); return [s, addDays(s, monthRows() * 7)]; }
+  if (state.view === 'year') return [new Date(state.anchor.getFullYear(), 0, 1), new Date(state.anchor.getFullYear() + 1, 0, 1)];
+  const d = visibleDays();
+  return [d[0], addDays(d[d.length - 1], 1)];
+}
+
+function step(dir) {
+  const a = state.anchor;
+  if (state.view === 'day') state.anchor = addDays(a, dir);
+  else if (state.view === 'week') state.anchor = addDays(a, 7 * dir);
+  else if (state.view === 'month') state.anchor = new Date(a.getFullYear(), a.getMonth() + dir, 1);
+  else if (state.view === 'year') state.anchor = new Date(a.getFullYear() + dir, a.getMonth(), 1);
+  else state.custom = { ...state.custom, start: addDays(state.custom.start, dir * state.custom.days) };
+  savePrefs();
+  loadEvents();
+}
+
+// View and custom range survive restarts (a convenience only, so failures are ignored).
+function savePrefs() {
+  try { localStorage.setItem('tempo.view', JSON.stringify({ view: state.view, custom: { start: ymd(state.custom.start), days: state.custom.days } })); } catch { /* storage unavailable */ }
+}
+function loadPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem('tempo.view') || 'null');
+    if (!p) return;
+    if (['day', 'week', 'month', 'year', 'custom'].includes(p.view)) state.view = p.view;
+    if (p.custom?.start && p.custom.days >= 1 && p.custom.days <= MAX_CUSTOM_DAYS) state.custom = { start: parseLocal(p.custom.start, '00:00'), days: p.custom.days };
+  } catch { /* ignore */ }
+}
+
+function applyCustomInputs() {
+  const f = $('#c-from').value; const t = $('#c-to').value;
+  if (!f || !t) return;
+  let a = parseLocal(f, '00:00'); let b = parseLocal(t, '00:00');
+  if (b < a) [a, b] = [b, a];
+  let days = Math.round((b - a) / DAY) + 1;
+  if (days > MAX_CUSTOM_DAYS) { days = MAX_CUSTOM_DAYS; toast(`Custom view shows up to ${MAX_CUSTOM_DAYS} days at a time.`); }
+  state.custom = { start: a, days };
+  savePrefs();
+  loadEvents();
+}
 
 function toast(msg, ms = 3200) {
   const t = $('#toast');
@@ -56,26 +118,53 @@ function toast(msg, ms = 3200) {
 // ---- data -------------------------------------------------------------------
 
 async function loadEvents() {
-  const days = visibleDays();
-  state.events = await tempo.events.range(days[0].getTime(), addDays(days[days.length - 1], 1).getTime());
+  const [from, to] = viewRange();
+  state.events = await tempo.events.range(from.getTime(), to.getTime());
   render();
+  tempo.google.ensureRange(from.getTime(), to.getTime()); // pulls more of Google's calendar if we navigated beyond what's synced
 }
 
 // ---- rendering ----------------------------------------------------------------
 
 function render() {
+  const timeGrid = TIME_GRID_VIEWS.includes(state.view);
+  for (const id of ['#cal-head', '#allday', '#cal-scroll']) $(id).hidden = !timeGrid;
+  $('#month').hidden = state.view !== 'month';
+  $('#year').hidden = state.view !== 'year';
+  document.querySelectorAll('#view-seg button').forEach((b) => b.classList.toggle('on', b.dataset.view === state.view));
+  $('#range-label').hidden = state.view === 'custom';
+  $('#custom-range').hidden = state.view !== 'custom';
+  $('#range-label').textContent = rangeLabel();
+
+  if (timeGrid) renderTimeGrid();
+  else if (state.view === 'month') renderMonth();
+  else renderYear();
+  renderChips();
+}
+
+function rangeLabel() {
+  const a = state.anchor;
+  if (state.view === 'month') return a.toLocaleDateString([], { month: 'long', year: 'numeric' });
+  if (state.view === 'year') return String(a.getFullYear());
+  const days = visibleDays();
+  const first = days[0]; const last = days[days.length - 1];
+  if (state.view === 'custom') {
+    $('#c-from').value = ymd(first); $('#c-to').value = ymd(last);
+    return '';
+  }
+  if (state.view === 'day') return first.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  return first.getMonth() === last.getMonth()
+    ? `${first.toLocaleDateString([], { month: 'long' })} ${first.getDate()}\u2013${last.getDate()}, ${last.getFullYear()}`
+    : `${first.toLocaleDateString([], { month: 'short', day: 'numeric' })} \u2013 ${last.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
+}
+
+function renderTimeGrid() {
   const days = visibleDays();
   const todayMs = startOfDay(new Date()).getTime();
-  document.documentElement.style.setProperty('--days', days.length);
-  document.documentElement.style.setProperty('--hour', `${HOUR_H}px`);
-
-  const first = days[0]; const last = days[days.length - 1];
-  $('#range-label').textContent = state.view === 'day'
-    ? first.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })
-    : first.getMonth() === last.getMonth()
-      ? `${first.toLocaleDateString([], { month: 'long' })} ${first.getDate()}–${last.getDate()}, ${last.getFullYear()}`
-      : `${first.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${last.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}`;
-  document.querySelectorAll('#view-seg button').forEach((b) => b.classList.toggle('on', b.dataset.view === state.view));
+  const root = document.documentElement.style;
+  root.setProperty('--days', days.length);
+  root.setProperty('--hour', `${HOUR_H}px`);
+  root.setProperty('--hours', H1() - H0());
 
   // day headers + all-day row
   const head = $('#cal-head');
@@ -91,7 +180,7 @@ function render() {
 
   // time grid
   const grid = $('#grid');
-  const gutter = h('div', { class: 'gutter' }, Array.from({ length: 23 }, (_, i) => h('span', { style: `top:${(i + 1) * HOUR_H}px` }, fmtHour(i + 1))));
+  const gutter = h('div', { class: 'gutter' }, Array.from({ length: H1() - H0() - 1 }, (_, i) => h('span', { style: `top:${(i + 1) * HOUR_H}px` }, fmtHour(H0() + i + 1))));
   const cols = days.map((d) => {
     const col = h('div', { class: `col${d.getTime() === todayMs ? ' today' : ''}`, 'data-day': String(d.getTime()) });
     for (const item of layoutDay(d)) col.append(eventEl(item));
@@ -99,12 +188,11 @@ function render() {
   });
   grid.replaceChildren(gutter, ...cols);
   updateNowLine();
-  renderChips();
 }
 
 // Clip events to the day and pack overlaps into side-by-side lanes.
 function layoutDay(day) {
-  const s0 = day.getTime(); const s1 = s0 + DAY;
+  const s0 = day.getTime() + H0() * 3600000; const s1 = day.getTime() + H1() * 3600000; // visible window only
   const segs = state.events.filter((e) => !e.allDay && Date.parse(e.end) > s0 && Date.parse(e.start) < s1)
     .map((e) => ({ e, s: Math.max(Date.parse(e.start), s0), t: Math.min(Date.parse(e.end), s1) }))
     .sort((a, b) => a.s - b.s || b.t - a.t);
@@ -124,21 +212,23 @@ function layoutDay(day) {
     cluster.push(seg); clusterEnd = Math.max(clusterEnd, seg.t);
   }
   flush();
-  return out.map((seg) => ({ ...seg, day: s0 }));
+  return out.map((seg) => ({ ...seg, day: day.getTime() }));
 }
 
 function eventEl({ e, s, t, lane, lanes, day }) {
-  const top = (s - day) / 60000 / 60 * HOUR_H;
-  const height = Math.max((t - s) / 60000 / 60 * HOUR_H - 2, 18);
+  const top = (s - (day + H0() * 3600000)) / 3600000 * HOUR_H;
+  const height = Math.max((t - s) / 3600000 * HOUR_H - 2, 18);
   const short = height < 38;
   const start = new Date(e.start); const end = new Date(e.end);
+  const clipped = Date.parse(e.start) < s || Date.parse(e.end) > t; // cut off by the visible-hours window
   const el = h('div', {
     class: `ev${blocksSomething(e) ? ' blocks' : ''}${short ? ' short' : ''}${e.pending ? ' pending' : ''}${e.recurring ? ' recurring' : ''}`,
     style: `--c:${colorOf(e)};top:${top}px;height:${height}px;left:calc(${lane / lanes * 100}% + 2px);width:calc(${100 / lanes}% - 6px)`,
     'data-id': e.id,
+    'data-clipped': clipped ? '1' : false,
   }, h('div', { class: 't' }, e.title), h('div', { class: 's' }, `${e.recurring ? '↻ ' : ''}${fmtTime(start)} – ${fmtTime(end)}`));
   // Only same-day events can be dragged; multi-day ones open the editor.
-  if (ymd(start) === ymd(new Date(end - 1))) el.append(h('div', { class: 'rz' }));
+  if (!clipped && ymd(start) === ymd(new Date(end - 1))) el.append(h('div', { class: 'rz' }));
   return el;
 }
 
@@ -147,7 +237,9 @@ function updateNowLine() {
   const col = $(`.col[data-day="${startOfDay(new Date()).getTime()}"]`);
   if (!col) return;
   const now = new Date();
-  col.append(h('div', { class: 'now-line', style: `top:${(now.getHours() * 60 + now.getMinutes()) / 60 * HOUR_H}px` }));
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  if (minutes < H0() * 60 || minutes > H1() * 60) return;
+  col.append(h('div', { class: 'now-line', style: `top:${(minutes - H0() * 60) / 60 * HOUR_H}px` }));
 }
 
 function renderChips() {
@@ -195,7 +287,7 @@ function colAt(x) {
 
 function minutesAt(col, y) {
   const r = col.getBoundingClientRect();
-  return Math.max(0, Math.min(24 * 60, (y - r.top) / HOUR_H * 60));
+  return Math.max(H0() * 60, Math.min(H1() * 60, H0() * 60 + (y - r.top) / HOUR_H * 60));
 }
 
 function initGrid() {
@@ -210,7 +302,7 @@ function initGrid() {
     if (evEl) {
       const item = state.events.find((e) => e.id === evEl.dataset.id);
       const resizing = !!ev.target.closest('.rz');
-      drag = { kind: resizing ? 'resize' : 'move', el: evEl, item, startY: ev.clientY, startCol: col, moved: false,
+      drag = { kind: evEl.dataset.clipped ? 'click' : resizing ? 'resize' : 'move', el: evEl, item, startY: ev.clientY, startCol: col, moved: false,
         origTop: parseFloat(evEl.style.top), origH: parseFloat(evEl.style.height), dur: Date.parse(item.end) - Date.parse(item.start) };
     } else {
       const startMin = snapMin(minutesAt(col, ev.clientY) - SNAP / 2);
@@ -227,7 +319,7 @@ function initGrid() {
       const [a, b] = [Math.min(drag.startMin, cur), Math.max(drag.startMin + SNAP, cur)];
       drag.a = a; drag.b = b;
       drag.ghost ||= drag.col.appendChild(h('div', { class: 'ghost' }));
-      drag.ghost.style.top = `${a / 60 * HOUR_H}px`;
+      drag.ghost.style.top = `${(a - H0() * 60) / 60 * HOUR_H}px`;
       drag.ghost.style.height = `${(b - a) / 60 * HOUR_H}px`;
       drag.ghost.textContent = `${fmtTime(new Date(2000, 0, 1, 0, a))} – ${fmtTime(new Date(2000, 0, 1, 0, b))}`;
     } else if (drag.kind === 'move' && drag.moved) {
@@ -255,11 +347,11 @@ function initGrid() {
         const a = d.moved ? d.a : d.startMin; const b = d.moved ? d.b : d.startMin + 60;
         const day = new Date(Number(d.col.dataset.day));
         openEditor(null, { start: new Date(day.getTime() + a * 60000), end: new Date(day.getTime() + b * 60000) });
-      } else if (!d.moved) {
+      } else if (!d.moved || d.kind === 'click') {
         openEditor(d.item);
       } else if (d.kind === 'move') {
         const col = d.col || d.startCol;
-        const minutes = snapMin(parseFloat(d.el.style.top) / HOUR_H * 60);
+        const minutes = snapMin(H0() * 60 + parseFloat(d.el.style.top) / HOUR_H * 60);
         const start = new Date(Number(col.dataset.day) + minutes * 60000);
         await tempo.events.update(d.item.id, { start: start.toISOString(), end: new Date(start.getTime() + d.dur).toISOString() });
       } else {
@@ -434,6 +526,20 @@ function hotkeyField(label, setting) {
   return field(label, input);
 }
 
+// Hour picker for the time grid's visible window; keeps at least four hours visible.
+function hourSelect(s, key, min, max) {
+  return h('select', {
+    onchange: async (e) => {
+      const v = Number(e.target.value);
+      const patch = { [key]: v };
+      if (key === 'dayStartHour' && s.dayEndHour - v < 4) patch.dayEndHour = Math.min(24, v + 4);
+      if (key === 'dayEndHour' && v - s.dayStartHour < 4) patch.dayStartHour = Math.max(0, v - 4);
+      await saveSettings(patch);
+      drawSettings();
+    },
+  }, Array.from({ length: max - min + 1 }, (_, i) => h('option', { value: min + i, selected: s[key] === min + i }, min + i === 24 ? 'midnight' : fmtHour(min + i))));
+}
+
 function drawSettings() {
   const d = $('#drawer'); const s = state.settings; const g = state.google; const b = state.blocker;
   const scroll = d.scrollTop;
@@ -500,6 +606,8 @@ function drawSettings() {
 
     h('section', {}, h('h3', {}, 'General'),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.launchAtStartup, onchange: (e) => saveSettings({ launchAtStartup: e.target.checked }) }), 'Launch Tempo when I sign in to Windows'),
+      h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-bottom:6px' },
+        field('Day view starts at', hourSelect(s, 'dayStartHour', 0, 20)), field('Day view ends at', hourSelect(s, 'dayEndHour', 4, 24))),
       h('label', { class: 'check', style: 'margin-top:10px' }, h('input', { type: 'checkbox', checked: s.voiceAutoSend, onchange: (e) => saveSettings({ voiceAutoSend: e.target.checked }) }), 'Send voice commands automatically when I stop talking'),
       h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-top:14px' },
         hotkeyField('Ask Tempo (chat) hotkey', 'hotkeyChat'), hotkeyField('Open calendar hotkey', 'hotkeyCalendar')),
@@ -510,30 +618,52 @@ function drawSettings() {
 // ---- boot -------------------------------------------------------------------------------------------
 
 function initChrome() {
-  $('#prev').onclick = () => { state.anchor = addDays(state.anchor, state.view === 'day' ? -1 : -7); loadEvents(); };
-  $('#next').onclick = () => { state.anchor = addDays(state.anchor, state.view === 'day' ? 1 : 7); loadEvents(); };
-  $('#today').onclick = () => { state.anchor = startOfDay(new Date()); loadEvents(); scrollToNow(); };
-  document.querySelectorAll('#view-seg button').forEach((b) => { b.onclick = () => { state.view = b.dataset.view; loadEvents(); }; });
+  $('#prev').onclick = () => step(-1);
+  $('#next').onclick = () => step(1);
+  $('#today').onclick = () => {
+    const today = startOfDay(new Date());
+    state.anchor = today;
+    if (state.view === 'custom') state.custom = { ...state.custom, start: today };
+    savePrefs();
+    loadEvents().then(scrollToNow);
+  };
+  document.querySelectorAll('#view-seg button').forEach((b) => {
+    b.onclick = () => setView(b.dataset.view);
+  });
+  $('#c-from').onchange = applyCustomInputs;
+  $('#c-to').onchange = applyCustomInputs;
   $('#settings-btn').onclick = openSettings;
   $('#sync-chip').onclick = () => {
     if (state.google?.connected) tempo.google.sync(); else openSettings();
   };
   document.addEventListener('keydown', (e) => {
-    if (e.target.matches('input, textarea')) return;
-    if (e.key === 'ArrowLeft') $('#prev').click();
-    if (e.key === 'ArrowRight') $('#next').click();
-    if (e.key === 't') $('#today').click();
+    if (e.target.matches('input, textarea, select') || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (e.key === 'ArrowLeft') step(-1);
+    else if (e.key === 'ArrowRight') step(1);
+    else if (e.key === 't') $('#today').click();
+    else { const v = { d: 'day', w: 'week', m: 'month', y: 'year', c: 'custom' }[e.key]; if (v) setView(v); }
   });
+  window.addEventListener('resize', () => { if (state.view === 'month') renderMonth(); });
+}
+
+function setView(view) {
+  state.view = view;
+  savePrefs();
+  loadEvents().then(scrollToNow);
 }
 
 function scrollToNow() {
+  if (!TIME_GRID_VIEWS.includes(state.view)) return;
   const now = new Date();
-  $('#cal-scroll').scrollTop = Math.max(0, (now.getHours() - 2) * HOUR_H);
+  $('#cal-scroll').scrollTop = Math.max(0, (now.getHours() - 2 - H0()) * HOUR_H);
 }
 
 async function main() {
+  loadPrefs();
   initChrome();
   initGrid();
+  initMonth();
+  initYear();
   [state.settings, state.google, state.blocker] = await Promise.all([tempo.settings.get(), tempo.google.state(), tempo.blocker.state()]);
   await loadEvents();
   scrollToNow();

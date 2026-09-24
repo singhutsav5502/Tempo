@@ -23,6 +23,8 @@ const DEFAULTS = {
     overrideMinutes: 5,
     warnSeconds: 10,
     launchAtStartup: false,
+    dayStartHour: 0,
+    dayEndHour: 24,
     voiceAutoSend: true,
     hotkeyChat: 'Control+Alt+T',
     hotkeyCalendar: 'Control+Alt+C',

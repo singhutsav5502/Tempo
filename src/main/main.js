@@ -230,6 +230,7 @@ function registerIpc() {
   ipcMain.handle('google:connect', async () => { await google.connect(); return google.getState(); });
   ipcMain.handle('google:disconnect', () => { google.disconnect(); return google.getState(); });
   ipcMain.handle('google:sync', () => google.sync());
+  ipcMain.handle('google:ensure-range', (_e, from, to) => google.ensureRange(from, to));
   google.status.on('change', () => broadcast('google:state', google.getState()));
 
   ipcMain.handle('blocker:state', () => blocker.snapshot());
