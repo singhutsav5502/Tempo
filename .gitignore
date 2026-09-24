@@ -1,0 +1,10 @@
+node_modules/
+dist/
+out/
+*.log
+
+# OAuth credentials and local secrets must never be committed
+client_secret*.json
+*.pem
+.env
+.env.*

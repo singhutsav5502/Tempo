@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <title>Tempo</title>
+  <link rel="stylesheet" href="../theme.css" />
+  <style>
+    html, body { background: transparent; }
+    #card { margin: 10px; height: calc(100vh - 20px); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 16px; box-shadow: var(--shadow); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; position: relative; overflow: hidden; }
+    .kicker { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+    .msg { font-size: 14px; font-weight: 600; }
+    .sub { color: var(--muted); }
+    .btns { margin-top: auto; display: flex; gap: 8px; justify-content: flex-end; }
+    .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--danger); width: 100%; transform-origin: left; }
+  </style>
+</head>
+<body>
+  <div id="card">
+    <div class="kicker" id="kicker">Blocked</div>
+    <div class="msg" id="msg"></div>
+    <div class="sub" id="sub"></div>
+    <div class="btns">
+      <button class="btn" id="close">Close it now</button>
+      <button class="btn primary" id="allow">Allow</button>
+    </div>
+    <div class="bar" id="bar"></div>
+  </div>
+  <script src="alert.js"></script>
+</body>
+</html>
