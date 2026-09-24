@@ -64,6 +64,6 @@ contextBridge.exposeInMainWorld('tempo', {
     onShow: on('alert:show'),
     act: (id, action) => ipcRenderer.send('alert:action', id, action),
   },
-  nav: { onOpenSheet: on('app:open-sheet') },
+  nav: { onOpenSheet: on('app:open-sheet'), onOpenSettings: on('app:open-settings'), openSettings: () => ipcRenderer.send('app:open-settings') },
   onError: on('app:error'),
 });

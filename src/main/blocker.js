@@ -64,9 +64,13 @@ const kill = (exe) => execFile('taskkill', ['/IM', exe, '/F'], { windowsHide: tr
 
 // ---- hosts file -----------------------------------------------------------
 
+// Opening for read+write checks the real ACL. (fs.access W_OK only looks at the read-only flag on Windows, so it
+// reported "enabled" while every write failed.)
 function hostsWritable() {
-  try { fs.accessSync(HOSTS, fs.constants.W_OK); return true; } catch { return false; }
+  try { fs.closeSync(fs.openSync(HOSTS, 'r+')); return true; } catch { return false; }
 }
+
+let hostsWarned = false;
 
 function hostLines(sites) {
   const out = [];
@@ -81,7 +85,15 @@ function hostLines(sites) {
 function applyHosts(sites) {
   const key = [...sites].sort().join(',');
   if (key === appliedSites) return;
-  if (!hostsWritable()) return;
+  if (!hostsWritable()) {
+    // One friendly nudge instead of a raw EPERM on every block.
+    if (sites.size && !hostsWarned) {
+      hostsWarned = true;
+      bus.emit('error', 'Websites cannot be blocked yet. Open Settings and choose "Enable website blocking" (one-time permission).');
+    }
+    return;
+  }
+  hostsWarned = false;
   try {
     const body = fs.readFileSync(HOSTS, 'utf8');
     const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

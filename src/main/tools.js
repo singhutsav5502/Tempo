@@ -10,7 +10,7 @@ How to work:
 - Default durations when none is given: focus/deep work 90 minutes, meetings and calls 30 minutes, everything else 60 minutes.
 - Deep work, studying, coding and writing sessions should use the "focus" block type so distractions get blocked. Call list_block_types if you are unsure which ids exist.
 - Repeating events: pass the recurrence field of create_event ("every weekday" = weekly with days MO,TU,WE,TH,FR). update_event and delete_event affect only the one occurrence you name unless you pass scope "all"; use "all" when the user means the whole series ("cancel my weekly standup").
-- You also keep the user's daily habit sheet (for example gym, badminton, leetcode, a hobby, a calorie goal). When they report progress ("did gym", "no badminton today", "ate 1450 calories", "solved 2 leetcode problems") call log_habit for each one; numbers go in the value field and a tick or cross is derived from the goal. Use list_habits if you are unsure what exists, and habit_summary for questions about how they are doing.
+- You also keep the user's daily goals (for example gym, badminton, leetcode, a hobby, a calorie limit); always call them goals. When they report progress ("did gym", "no badminton today", "ate 1450 calories", "solved 2 leetcode problems") call log_habit for each one (a goal is what the tool calls a habit); numbers go in the value field and a tick or cross is derived from the goal. Use list_habits if you are unsure what exists, and habit_summary for questions about how their goals are going.
 - Before scheduling, check for conflicts (list_events or find_free_time). If something overlaps, say so plainly and suggest an alternative rather than silently double-booking.
 - Your replies appear in a narrow chat panel: keep them to one to three short sentences, plain text, no tables or headings. Confirm what you did with the concrete day and time.`;
 
@@ -60,20 +60,20 @@ const TOOLS = [
     day_start_hour: { type: 'integer', description: 'Default 9' },
     day_end_hour: { type: 'integer', description: 'Default 18' },
   }, ['from_date', 'duration_minutes']),
-  T('list_habits', 'List the daily habits with their goals and today\'s status.', {}),
-  T('log_habit', 'Record progress on a daily habit. Use done for tick/cross habits and value for number habits (the tick or cross is worked out from the goal).', {
-    habit: { type: 'string', description: 'Habit name or id, e.g. gym or calories' },
+  T('list_habits', 'List the daily goals with their targets and today\'s status.', {}),
+  T('log_habit', 'Record progress on a daily goal. Use done for tick/cross habits and value for number habits (the tick or cross is worked out from the goal).', {
+    habit: { type: 'string', description: 'Goal name or id, e.g. gym or calories' },
     date: { type: 'string', description: 'YYYY-MM-DD; defaults to today' },
     done: { type: 'boolean', description: 'true = ticked, false = crossed' },
     value: { type: 'number', description: 'Actual number for number habits, e.g. 1450 calories' },
     note: { type: 'string' },
   }, ['habit']),
-  T('habit_summary', 'Streaks, completion rate and averages per habit over the last N days.', {
+  T('habit_summary', 'Streaks, completion rate and averages per goal over the last N days.', {
     days: { type: 'integer', description: 'Default 7' },
   }),
-  T('add_habit', 'Add a new daily habit to track.', {
+  T('add_habit', 'Add a new daily goal to track.', {
     name: { type: 'string' },
-    kind: { type: 'string', enum: ['check', 'number'], description: 'check = tick/cross; number = a number against a goal' },
+    kind: { type: 'string', enum: ['check', 'number'], description: 'check = tick/cross; number = a number against a target' },
     target: { type: 'number' },
     direction: { type: 'string', enum: ['atleast', 'atmost'], description: 'For number habits: reach at least the target, or stay at most under it' },
     unit: { type: 'string' },
@@ -202,7 +202,7 @@ function runTool(name, input) {
         const goal = habits.goalText(habit);
         const val = entry && entry.value != null ? ` value=${entry.value}${habit.unit ? ' ' + habit.unit : ''}` : '';
         return `${habit.name} (${habit.kind}${goal ? `, goal ${goal}` : ''}${scheduled ? '' : ', rest day'}): ${status || 'not logged'}${val}`;
-      }).join('\n') || 'No habits yet.';
+      }).join('\n') || 'No goals yet.';
     }
     case 'log_habit': {
       const habit = habits.find(input.habit);
@@ -224,7 +224,7 @@ function runTool(name, input) {
         const h = habits.byId(st.id);
         const avg = st.average != null ? `, avg ${st.average}${h.unit ? ' ' + h.unit : ''}` : '';
         return `${st.name}: ${st.done} done, ${st.missed} missed in last ${days}d${st.rate != null ? ` (${st.rate}%)` : ''}, streak ${st.streak}, best ${st.best}${avg}`;
-      }).join('\n') || 'No habits yet.';
+      }).join('\n') || 'No goals yet.';
     }
     case 'add_habit': {
       const codes = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
@@ -233,7 +233,7 @@ function runTool(name, input) {
         unit: input.unit, category: input.category, days: input.days ? input.days.map((d) => codes.indexOf(String(d).slice(0, 2).toUpperCase())).filter((i) => i >= 0) : undefined,
       });
       const goal = habits.goalText(h);
-      return `Added habit ${h.name} (${h.kind}${goal ? `, goal ${goal}` : ''})`;
+      return `Added goal ${h.name} (${h.kind}${goal ? `, goal ${goal}` : ''})`;
     }
     case 'list_block_types':
       return events.types().map((t) => `${t.id} (${t.name}) apps: ${t.apps.join(', ') || '-'} | sites: ${t.sites.join(', ') || '-'}`).join('\n');
@@ -262,7 +262,7 @@ function toolLabel(name, input) {
   const t = input.title ? ` "${input.title}"` : '';
   return ({
     list_events: 'Checking calendar', create_event: `Adding${t}`, update_event: `Updating${t}`, delete_event: 'Deleting event',
-    find_free_time: 'Finding free time', list_habits: 'Checking habits', log_habit: 'Logging habit', habit_summary: 'Reviewing habits', add_habit: 'Adding habit', list_block_types: 'Reading block types', edit_block_type: 'Editing block list',
+    find_free_time: 'Finding free time', list_habits: 'Checking goals', log_habit: 'Logging goal', habit_summary: 'Reviewing goals', add_habit: 'Adding goal', list_block_types: 'Reading block types', edit_block_type: 'Editing block list',
   })[name] || name;
 }
 

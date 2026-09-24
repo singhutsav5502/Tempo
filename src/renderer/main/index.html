@@ -18,9 +18,6 @@
         <button class="icon-btn" id="next" title="Next"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg></button>
         <div id="range-label"></div>
       </div>
-      <div id="custom-range" hidden>
-        <input type="date" id="c-from" title="From" /><span>–</span><input type="date" id="c-to" title="To (inclusive)" />
-      </div>
       <div class="seg" id="view-seg">
         <button data-view="day">Day</button>
         <button data-view="week">Week</button>
@@ -28,20 +25,26 @@
         <button data-view="year">Year</button>
         <button data-view="custom">Custom</button>
       </div>
+      <select id="view-select" aria-label="Calendar view">
+        <option value="day">Day</option><option value="week">Week</option><option value="month">Month</option><option value="year">Year</option><option value="custom">Custom</option>
+      </select>
       <div class="spacer"></div>
       <div id="block-chip" hidden></div>
       <button id="sync-chip" class="chip" title="Sync with Google Calendar"></button>
-      <button class="icon-btn" id="rail-btn" title="Today's goals panel (g)">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="0.8" /></svg>
-      </button>
-      <button class="icon-btn" id="sheet-btn" title="Daily sheet (s)">
-        <svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11" /><path d="M3.5 6.5l1.5 1.5 2.5-3M3.5 12.5l1.5 1.5 2.5-3M3.5 18.5l1.5 1.5 2.5-3" /></svg>
+      <button class="btn primary" id="new-btn" title="New event (n)"><span aria-hidden="true">+</span><span class="tl">New</span></button>
+      <button class="chip goals-btn" id="goals-btn" title="Goals (g)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="0.8" /></svg><span class="tl">Goals</span><b id="goals-count"></b>
       </button>
       <button class="icon-btn" id="settings-btn" title="Settings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
       </button>
     </header>
 
+    <div id="subbar" hidden>
+      <span class="sub-lbl">From</span><input type="date" id="c-from" aria-label="From date" />
+      <span class="sub-lbl">to</span><input type="date" id="c-to" aria-label="To date (inclusive)" />
+      <span class="sub-note" id="c-note"></span>
+    </div>
     <div id="body">
     <section id="cal">
       <div id="cal-head"></div>

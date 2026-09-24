@@ -20,8 +20,8 @@ Hotkeys (changeable in Settings): **Ctrl+Alt+T** opens the chat and starts **lis
 
 ## Daily sheet (habits)
 
-The checklist icon in the top bar (or press `s`) opens your daily sheet. It ships with Gym, Badminton, LeetCode,
-Hobby and Calories; **Edit habits** lets you rename, recolor, reorder, add and remove them.
+Press `s` (or **Open full sheet** in the goals panel) for the full goals sheet. It ships with Gym, Badminton, LeetCode,
+Hobby and Calories; **Edit goals** lets you rename, recolor, reorder, add and remove them.
 
 - **Tick / cross** habits are simply done or not.
 - **Number** habits have a goal: *at least* (LeetCode ≥ 1 problem) or *at most* (Calories ≤ 1600 kcal). Type the
@@ -35,7 +35,9 @@ Hobby and Calories; **Edit habits** lets you rename, recolor, reorder, add and r
 
 Goals are kept in front of you on purpose:
 
-- A **Today's goals** panel sits beside the calendar (toggle with the target icon or `g`), showing what is still to go.
+- A **Goals** panel is docked beside the calendar on wide windows (1360px and up) and becomes a slim strip (progress
+  ring + one dot per goal) on narrower ones; the **Goals** button or `g` collapses/expands it, and the button always shows
+  today's count.
   The icon carries a dot while goals are open.
 - The floating widget's pill shows a goals chip (`3/5`, green when done); click it to jump to the Today tab.
 - **Reminders**: a morning list of today's goals (default 9:00) and an evening notice if some are still open

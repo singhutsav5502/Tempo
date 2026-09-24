@@ -59,7 +59,7 @@ const GoalUI = (() => {
       const step = habit.target != null && habit.target >= 100 ? 50 : 1;
       const input = el('input');
       input.type = 'number'; input.step = 'any'; input.min = '0';
-      input.placeholder = habit.target != null ? String(habit.target) : '0';
+      input.placeholder = '–';
       input.value = entry?.value ?? '';
       input.onchange = () => onLog(habit.id, { value: input.value === '' ? null : Number(input.value) });
       const minus = el('button', 'step', '−');

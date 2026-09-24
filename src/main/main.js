@@ -34,13 +34,46 @@ const broadcast = (ch, payload) => [mainWin, widgetWin].forEach((w) => send(w, c
 
 // ---- windows --------------------------------------------------------------
 
+// Big enough by default that the goals panel can dock (see RAIL_WIDE in the renderer); remembers where you left it.
+function initialMainBounds() {
+  const saved = store.get().window;
+  const fits = (r) => screen.getAllDisplays().some((d) => {
+    const w = d.workArea;
+    return r.x < w.x + w.width && r.x + r.width > w.x && r.y < w.y + w.height && r.y + r.height > w.y;
+  });
+  if (saved && saved.width >= 820 && saved.height >= 560 && (saved.x === undefined || fits(saved))) return saved;
+  const wa = screen.getPrimaryDisplay().workArea;
+  return {
+    width: Math.min(Math.max(1180, Math.round(wa.width * 0.72)), 1600),
+    height: Math.min(Math.max(720, Math.round(wa.height * 0.82)), 1000),
+  };
+}
+
+function rememberMainBounds() {
+  let timer = null;
+  const save = () => {
+    if (!mainWin || mainWin.isMinimized()) return;
+    const maximized = mainWin.isMaximized();
+    store.get().window = { ...mainWin.getNormalBounds(), maximized };
+    store.save();
+  };
+  const later = () => { clearTimeout(timer); timer = setTimeout(save, 500); };
+  mainWin.on('resize', later);
+  mainWin.on('move', later);
+  mainWin.on('maximize', later);
+  mainWin.on('unmaximize', later);
+}
+
 function createMain() {
+  const bounds = initialMainBounds();
   mainWin = new BrowserWindow({
-    width: 1180, height: 780, minWidth: 820, minHeight: 560,
+    ...bounds, minWidth: 820, minHeight: 560,
     show: false, backgroundColor: dark() ? '#0e0f13' : '#f6f6f8',
     titleBarStyle: 'hidden', titleBarOverlay: overlay(),
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true },
   });
+  if (bounds.maximized) mainWin.maximize();
+  rememberMainBounds();
   mainWin.setMenuBarVisibility(false);
   mainWin.loadFile(R('main', 'index.html'));
   mainWin.once('ready-to-show', () => mainWin.show());
@@ -274,6 +307,11 @@ function registerIpc() {
 
   ipcMain.on('widget:set-open', (_e, open) => setWidgetOpen(open));
   ipcMain.on('app:open-main', () => showMain());
+  ipcMain.on('app:open-settings', () => {
+    showMain();
+    const open = () => send(mainWin, 'app:open-settings');
+    if (mainWin.webContents.isLoading()) mainWin.webContents.once('did-finish-load', open); else open();
+  });
 }
 
 events.bus.on('changed', () => broadcast('events:changed'));

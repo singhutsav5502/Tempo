@@ -8,8 +8,11 @@ const DAY = 86400000;
 const MAX_CUSTOM_DAYS = 14;
 const TIME_GRID_VIEWS = ['day', 'week', 'custom'];
 
+const RAIL_WIDE = 1360; // at least this wide: the goals panel is docked; otherwise a slim strip
+
 const state = {
-  rail: true, // goals panel beside the calendar
+  railCollapsed: false, // user choice while the window is wide
+  railOverlay: false,   // slide-over opened from the slim strip
   page: 'calendar', // 'calendar' | 'sheet'
   sheetDate: startOfDay(new Date()),
   view: 'week',
@@ -131,16 +134,30 @@ async function loadEvents() {
 // ---- rendering ----------------------------------------------------------------
 
 // Calendar <-> daily sheet. In the sheet, the top bar's arrows/Today move through days instead of calendar ranges.
+const isWide = () => window.innerWidth >= RAIL_WIDE;
+
+/** 'full' (docked or slide-over), 'slim' (icon strip) or 'none' (on the goals sheet page). */
+function railMode() {
+  if (state.page === 'sheet') return 'none';
+  if (state.railOverlay) return 'full';
+  return isWide() && !state.railCollapsed ? 'full' : 'slim';
+}
+
 function applyPage() {
   const sheet = state.page === 'sheet';
+  const custom = state.view === 'custom' && !sheet;
   $('#cal').hidden = sheet;
   $('#sheet').hidden = !sheet;
   $('#view-seg').hidden = sheet;
-  $('#rail').hidden = sheet || !state.rail;
-  $('#rail-btn').classList.toggle('on', state.rail && !sheet);
-  $('#sheet-btn').classList.toggle('on', sheet);
+  $('#view-select').hidden = sheet;
+  $('#subbar').hidden = !custom;
+  const mode = railMode();
+  const rail = $('#rail');
+  rail.hidden = sheet;
+  rail.classList.toggle('slim', mode === 'slim');
+  rail.classList.toggle('overlay', state.railOverlay && !sheet);
+  $('#goals-btn').classList.toggle('on', sheet || mode === 'full');
   if (sheet) {
-    $('#custom-range').hidden = true;
     $('#range-label').hidden = false;
     $('#range-label').textContent = sheetLabel();
   }
@@ -148,15 +165,27 @@ function applyPage() {
 
 function setPage(page) {
   state.page = page;
+  state.railOverlay = false;
   applyPage();
   if (page === 'sheet') renderSheet(); else { loadEvents(); renderRail(); }
 }
 
-function setRail(open) {
-  state.rail = open;
-  try { localStorage.setItem('tempo.rail', open ? '1' : '0'); } catch { /* storage unavailable */ }
+/** The Goals button: leave the sheet, collapse/expand the docked panel, or open/close the slide-over. */
+function toggleGoals() {
+  if (state.page === 'sheet') { setPage('calendar'); return; }
+  if (isWide()) {
+    state.railCollapsed = !state.railCollapsed;
+    state.railOverlay = false;
+    try { localStorage.setItem('tempo.railCollapsed', state.railCollapsed ? '1' : '0'); } catch { /* storage unavailable */ }
+  } else {
+    state.railOverlay = !state.railOverlay;
+  }
+  refreshRailLayout();
+}
+
+function refreshRailLayout() {
   applyPage();
-  if (open) renderRail();
+  renderRail();
   if (state.view === 'month') requestAnimationFrame(() => renderMonth()); // the calendar just changed width
 }
 
@@ -169,7 +198,7 @@ function render() {
   $('#year').hidden = state.view !== 'year';
   document.querySelectorAll('#view-seg button').forEach((b) => b.classList.toggle('on', b.dataset.view === state.view));
   $('#range-label').hidden = state.view === 'custom';
-  $('#custom-range').hidden = state.view !== 'custom';
+  $('#view-select').value = state.view;
   $('#range-label').textContent = rangeLabel();
 
   if (timeGrid) renderTimeGrid();
@@ -186,6 +215,7 @@ function rangeLabel() {
   const first = days[0]; const last = days[days.length - 1];
   if (state.view === 'custom') {
     $('#c-from').value = ymd(first); $('#c-to').value = ymd(last);
+    $('#c-note').textContent = `${days.length} day${days.length > 1 ? 's' : ''} (up to ${MAX_CUSTOM_DAYS})`;
     return '';
   }
   if (state.view === 'day') return first.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
@@ -262,6 +292,7 @@ function eventEl({ e, s, t, lane, lanes, day }) {
     style: `--c:${colorOf(e)};top:${top}px;height:${height}px;left:calc(${lane / lanes * 100}% + 2px);width:calc(${100 / lanes}% - 6px)`,
     'data-id': e.id,
     'data-clipped': clipped ? '1' : false,
+    title: `${e.title}\n${fmtTime(start)} – ${fmtTime(end)}${e.description ? `\n${e.description.slice(0, 200)}` : ''}`,
   }, h('div', { class: 't' }, e.title), h('div', { class: 's' }, `${e.recurring ? '↻ ' : ''}${e.description ? '≡ ' : ''}${fmtTime(start)} – ${fmtTime(end)}`),
     e.description && !short && height >= 48 ? h('div', { class: 'n' }, e.description.split('\n')[0]) : null);
   // Only same-day events can be dragged; multi-day ones open the editor.
@@ -289,14 +320,16 @@ function renderChips() {
   else if (g.syncing) { text = 'Syncing…'; cls += ' ok'; }
   else { text = g.lastSync ? `Synced ${timeAgo(g.lastSync)}` : 'Connected'; cls += ' ok'; }
   sync.className = cls;
-  sync.replaceChildren(h('span', { class: 'dot' }), text);
+  sync.title = g.error ? `Sync error: ${g.error}` : text;
+  sync.replaceChildren(h('span', { class: 'dot' }), h('span', { class: 'tl' }, text));
 
   const b = state.blocker; const chip = $('#block-chip');
   const active = b?.active?.filter((a) => a.type) || [];
   if (active.length && (b.apps.length || b.sites.length)) {
     const end = new Date(Math.min(...active.map((a) => Date.parse(a.end))));
     chip.hidden = false;
-    chip.replaceChildren(shieldIcon(), `Blocking · ${active[0].title} · until ${fmtTime(end)}`);
+    chip.title = `Blocking · ${active[0].title} · until ${fmtTime(end)}`; // full detail in the tooltip; the label stays short
+    chip.replaceChildren(shieldIcon(), h('span', { class: 'tl' }, `Blocking until ${fmtTime(end)}`));
   } else chip.hidden = true;
 }
 
@@ -527,9 +560,9 @@ async function saveSettings(patch) {
   state.settings = await tempo.settings.set(patch);
 }
 
-async function openSettings() {
+async function openSettings(force = false) {
   const d = $('#drawer');
-  if (!d.hidden) { d.hidden = true; return; }
+  if (!d.hidden && !force) { d.hidden = true; return; }
   state.settings = await tempo.settings.get();
   state.google = await tempo.google.state();
   state.blocker = await tempo.blocker.state();
@@ -603,8 +636,8 @@ function drawSettings() {
         h('input', { type: 'color', value: t.color, onchange: (e) => patch({ color: e.target.value }).then(() => loadEvents()) }),
         h('input', { type: 'text', value: t.name, onchange: (e) => patch({ name: e.target.value.trim() || t.name }) }),
         h('button', { class: 'icon-btn', title: 'Delete type', onclick: async () => { s.types.splice(i, 1); await saveSettings({ types: s.types }); drawSettings(); loadEvents(); } }, '✕')),
-      field('Apps to close (process names)', h('textarea', { spellcheck: 'false', placeholder: 'discord.exe\nsteam.exe', onchange: (e) => patch({ apps: splitList(e.target.value) }) }, t.apps.join('\n'))),
-      field('Websites to block', h('textarea', { spellcheck: 'false', placeholder: 'youtube.com\nreddit.com', onchange: (e) => patch({ sites: splitList(e.target.value) }) }, t.sites.join('\n'))));
+      field('Apps to close (process names)', h('textarea', { spellcheck: 'false', placeholder: 'e.g. discord.exe, steam.exe', onchange: (e) => patch({ apps: splitList(e.target.value) }) }, t.apps.join('\n'))),
+      field('Websites to block', h('textarea', { spellcheck: 'false', placeholder: 'e.g. youtube.com, reddit.com', onchange: (e) => patch({ sites: splitList(e.target.value) }) }, t.sites.join('\n'))));
   });
 
   const googleStatus = g.connected
@@ -663,8 +696,13 @@ function drawSettings() {
 function initChrome() {
   $('#prev').onclick = () => step(-1);
   $('#next').onclick = () => step(1);
-  $('#sheet-btn').onclick = () => setPage(state.page === 'sheet' ? 'calendar' : 'sheet');
-  $('#rail-btn').onclick = () => { if (state.page === 'sheet') setPage('calendar'); else setRail(!state.rail); };
+  $('#goals-btn').onclick = toggleGoals;
+  $('#view-select').onchange = (e) => setView(e.target.value);
+  $('#new-btn').onclick = () => {
+    const d = new Date();
+    if (state.view === 'day' && ymd(state.anchor) !== ymd(d)) { d.setTime(state.anchor.getTime()); d.setHours(9, 0, 0, 0); } else { d.setMinutes(0, 0, 0); d.setHours(d.getHours() + 1); }
+    openEditor(null, { start: d, end: new Date(d.getTime() + 3600000) });
+  };
   $('#today').onclick = () => {
     const today = startOfDay(new Date());
     if (state.page === 'sheet') { state.sheetDate = today; applyPage(); renderSheet(); return; }
@@ -678,7 +716,7 @@ function initChrome() {
   });
   $('#c-from').onchange = applyCustomInputs;
   $('#c-to').onchange = applyCustomInputs;
-  $('#settings-btn').onclick = openSettings;
+  $('#settings-btn').onclick = () => openSettings();
   $('#sync-chip').onclick = () => {
     if (state.google?.connected) tempo.google.sync(); else openSettings();
   };
@@ -687,12 +725,18 @@ function initChrome() {
     if (e.key === 'ArrowLeft') step(-1);
     else if (e.key === 'ArrowRight') step(1);
     else if (e.key === 't') $('#today').click();
-    else if (e.key === 's') $('#sheet-btn').click();
-    else if (e.key === 'g') $('#rail-btn').click();
+    else if (e.key === 's') setPage(state.page === 'sheet' ? 'calendar' : 'sheet');
+    else if (e.key === 'g') $('#goals-btn').click();
+    else if (e.key === 'n' && state.page !== 'sheet') $('#new-btn').click();
+    else if (e.key === 'Escape' && state.railOverlay) { state.railOverlay = false; refreshRailLayout(); }
     else if (state.page === 'sheet') return;
     else { const v = { d: 'day', w: 'week', m: 'month', y: 'year', c: 'custom' }[e.key]; if (v) setView(v); }
   });
-  window.addEventListener('resize', () => { if (state.view === 'month') renderMonth(); });
+  window.addEventListener('resize', () => { applyPage(); renderRail(); if (state.view === 'month') renderMonth(); });
+  // Clicking outside the slide-over closes it.
+  document.addEventListener('mousedown', (e) => {
+    if (state.railOverlay && !e.target.closest?.('#rail, #goals-btn')) { state.railOverlay = false; refreshRailLayout(); }
+  });
 }
 
 function setView(view) {
@@ -709,7 +753,7 @@ function scrollToNow() {
 
 async function main() {
   loadPrefs();
-  try { state.rail = localStorage.getItem('tempo.rail') !== '0'; } catch { /* default open */ }
+  try { state.railCollapsed = localStorage.getItem('tempo.railCollapsed') === '1'; } catch { /* default: docked when wide */ }
   initChrome();
   initGrid();
   initMonth();
@@ -721,7 +765,7 @@ async function main() {
 
   tempo.events.onChanged(async () => { state.settings = await tempo.settings.get(); loadEvents(); });
   tempo.google.onState((g) => { state.google = g; renderChips(); if (!$('#drawer').hidden) drawSettings(); });
-  tempo.blocker.onState((b) => { state.blocker = b; renderChips(); });
+  tempo.blocker.onState((b) => { state.blocker = b; renderChips(); renderRail(); });
   // Repaint the sheet when habits change elsewhere (e.g. the widget or the assistant), but never under someone's cursor.
   tempo.habits.onChanged(() => {
     if (state.page === 'sheet' && !document.activeElement?.matches?.('#sheet input')) renderSheet();
@@ -730,6 +774,7 @@ async function main() {
   setInterval(renderRail, 60000); // also rolls the panel over at midnight
   tempo.onError((m) => toast(m));
   tempo.nav.onOpenSheet(() => setPage('sheet'));
+  tempo.nav.onOpenSettings(() => openSettings(true));
   setInterval(() => { updateNowLine(); renderChips(); }, 30000);
 }
 

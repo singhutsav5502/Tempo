@@ -12,7 +12,7 @@ const isToday = (d) => ymd(d) === ymd(new Date());
 
 function sheetLabel() {
   const d = state.sheetDate;
-  return `${d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}${isToday(d) ? ' · Today' : ''}`;
+  return `Goals · ${d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}${isToday(d) ? ' · Today' : ''}`;
 }
 
 function goalText(h) {
@@ -49,7 +49,7 @@ function habitRow({ habit, entry, status, scheduled }, date, stat) {
   if (isNum) {
     const step = numberStep(habit);
     const input = h('input', {
-      type: 'number', class: 'hnum', step: 'any', min: '0', placeholder: habit.target != null ? String(habit.target) : '0',
+      type: 'number', class: 'hnum', step: 'any', min: '0', placeholder: '–',
       value: value ?? '', onchange: (e) => logHabit(date, habit.id, { value: e.target.value === '' ? null : Number(e.target.value) }),
     });
     numberCtl = h('div', { class: 'numctl' },
@@ -96,10 +96,10 @@ async function renderSheet() {
   const summary = h('div', { class: 'ssum' },
     h('div', { class: 'ssum-top' },
       h('div', {}, h('span', { class: 'big' }, `${done}`), h('span', { class: 'of' }, ` / ${due.length} done`)),
-      h('button', { class: 'btn', onclick: openHabitEditor }, 'Edit habits')),
+      h('button', { class: 'btn', onclick: openHabitEditor }, 'Edit goals')),
     h('div', { class: 'sprog' }, h('i', { style: `width:${due.length ? (done / due.length) * 100 : 0}%` })));
 
-  const list = h('div', { class: 'hlist' }, rows.length ? rows.map((r) => habitRow(r, date, byStat.get(r.habit.id))) : h('div', { class: 'hint' }, 'No habits yet. Use "Edit habits" to add some.'));
+  const list = h('div', { class: 'hlist' }, rows.length ? rows.map((r) => habitRow(r, date, byStat.get(r.habit.id))) : h('div', { class: 'hint' }, 'No goals yet. Use "Edit goals" to add some.'));
 
   root.replaceChildren(h('div', { class: 'sheet-inner' }, summary, list, matrixEl(rows, range, stats, date)));
   root.scrollTop = scroll;
@@ -188,12 +188,12 @@ async function openHabitEditor() {
           h('input', { type: 'text', list: 'habit-cats', placeholder: 'category', value: hb.category || '', onchange: (e) => save(hb, { category: e.target.value }) })));
     });
     box.replaceChildren(
-      h('div', { style: 'font-weight:600;font-size:15px' }, 'Your habits'),
-      h('div', { class: 'hint', style: 'margin:-6px 0 0' }, 'Tick/cross habits are done or not. Number habits have a goal: enter the actual number and the tick or cross follows. Days set when a habit counts. Categories group habits for analytics.'),
+      h('div', { style: 'font-weight:600;font-size:15px' }, 'Your goals'),
+      h('div', { class: 'hint', style: 'margin:-6px 0 0' }, 'Tick / cross goals are done or not. Number goals have a target: enter the actual number and the tick or cross follows. Days set when a goal counts. Categories group goals for analytics.'),
       h('div', { class: 'hcards' }, cards),
       h('datalist', { id: 'habit-cats' }, SUGGESTED_CATEGORIES.map((c) => h('option', { value: c }))),
       h('div', { class: 'actions' },
-        h('button', { class: 'btn', onclick: async () => { await tempo.habits.save({ name: 'New habit', kind: 'check' }); draw(); } }, '+ Add habit'),
+        h('button', { class: 'btn', onclick: async () => { await tempo.habits.save({ name: 'New goal', kind: 'check' }); draw(); } }, '+ Add goal'),
         h('button', { class: 'btn primary', onclick: () => { closeModal(); renderSheet(); } }, 'Done')));
   };
   draw();

@@ -128,7 +128,18 @@ tempo.chat.onEvent((m) => {
   } else if (m.type === 'error') {
     bot = null;
     setBusy(false);
-    msgs.append(el('div', 'msg err', m.message));
+    const bubble = el('div', 'msg err');
+    bubble.setAttribute('role', 'alert');
+    bubble.append(document.createTextNode(m.message));
+    // Setup problems get a way forward instead of a dead end.
+    if (/settings|signed in|not found|API key|login|Claude Code/i.test(m.message)) {
+      const actions = el('div', 'err-actions');
+      const open = el('button', 'btn', 'Open settings');
+      open.onclick = () => tempo.nav.openSettings();
+      actions.append(open);
+      bubble.append(actions);
+    }
+    msgs.append(bubble);
   } else if (m.type === 'end') {
     bot = null;
     setBusy(false);
@@ -302,7 +313,7 @@ async function renderToday() {
 
   const box = $('#today');
   const scroll = box.scrollTop;
-  box.replaceChildren(GoalUI.header(rows), ...(rows.length ? rows.map((r) => GoalUI.row(r, logHabit)) : [GoalUI.el('div', 'tempty', 'No habits yet. Add some in the main window (checklist icon).')]));
+  box.replaceChildren(GoalUI.header(rows), ...(rows.length ? rows.map((r) => GoalUI.row(r, logHabit)) : [GoalUI.el('div', 'tempty', 'No goals yet. Open Goals in the main window to add some.')]));
   box.scrollTop = scroll;
 }
 

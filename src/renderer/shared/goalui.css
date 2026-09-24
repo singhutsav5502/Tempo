@@ -14,11 +14,11 @@
 .trow.rest { opacity: 0.55; }
 .tname { flex: 1; min-width: 0; }
 .tname b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tname small { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tname small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tnum { display: flex; align-items: center; gap: 2px; }
 .tnum input { width: 56px; text-align: center; padding: 5px 4px; font-weight: 600; }
 .tnum input::-webkit-inner-spin-button { display: none; }
-.tnum .step { width: 20px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); padding: 0; }
+.tnum .step { width: 24px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); padding: 0; }
 .tnum .step:hover { background: var(--surface); color: var(--text); }
 .tbtn { flex: none; width: 30px; height: 30px; border-radius: 9px; border: 1.5px solid var(--border-strong); background: transparent; color: var(--muted); font-size: 14px; padding: 0; }
 .tbtn.tick:hover { border-color: var(--ok); color: var(--ok); }
