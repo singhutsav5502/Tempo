@@ -92,3 +92,7 @@ body.tab-today #msgs, body.tab-today #composer, body.tab-today #voice-status, bo
 .goals-chip.some { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 .goals-chip.all { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
 .goals-chip.none { display: none; }
+
+.undo-chip { align-self: flex-start; border: 1px solid var(--border-strong); background: transparent; border-radius: 999px; padding: 3px 11px; font-size: 12px; color: var(--muted); }
+.undo-chip:hover { color: var(--text); border-color: var(--accent); }
+.undo-chip:disabled { opacity: 0.7; }

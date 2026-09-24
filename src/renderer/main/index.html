@@ -10,13 +10,13 @@
 </head>
 <body>
   <div id="app">
-    <header id="topbar">
+    <header id="topbar" role="banner">
       <div class="brand"><span class="logo"></span>Tempo</div>
       <div class="nav">
-        <button class="icon-btn" id="prev" title="Previous"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg></button>
+        <button class="icon-btn" id="prev" title="Previous (←)" aria-label="Previous"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg></button>
         <button class="btn today" id="today">Today</button>
-        <button class="icon-btn" id="next" title="Next"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg></button>
-        <div id="range-label"></div>
+        <button class="icon-btn" id="next" title="Next (→)" aria-label="Next"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg></button>
+        <div id="range-label" aria-live="polite"></div>
       </div>
       <div class="seg" id="view-seg">
         <button data-view="day">Day</button>
@@ -35,7 +35,7 @@
       <button class="chip goals-btn" id="goals-btn" title="Goals (g)">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="0.8" /></svg><span class="tl">Goals</span><b id="goals-count"></b>
       </button>
-      <button class="icon-btn" id="settings-btn" title="Settings">
+      <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
       </button>
     </header>
@@ -45,7 +45,7 @@
       <span class="sub-lbl">to</span><input type="date" id="c-to" aria-label="To date (inclusive)" />
       <span class="sub-note" id="c-note"></span>
     </div>
-    <div id="body">
+    <main id="body">
     <section id="cal">
       <div id="cal-head"></div>
       <div id="allday"></div>
@@ -54,19 +54,20 @@
       <div id="year" hidden></div>
     </section>
     <section id="sheet" hidden></section>
-    <aside id="rail" hidden></aside>
-    </div>
+    <aside id="rail" hidden aria-label="Goals"></aside>
+    </main>
   </div>
 
-  <aside id="drawer" hidden></aside>
+  <aside id="drawer" hidden role="dialog" aria-label="Settings"></aside>
   <div id="modal-root"></div>
-  <div id="toast" hidden></div>
+  <div id="toast" hidden role="status" aria-live="polite"></div>
 
   <script src="../shared/goalui.js"></script>
   <script src="views.js"></script>
   <script src="sheet.js"></script>
   <script src="rail.js"></script>
   <script src="wizard.js"></script>
+  <script src="settings.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -85,11 +85,20 @@ sent when you stop (or press the hotkey again to send immediately; Esc cancels).
 Whisper (`whisper-base.en`), so audio never leaves your PC. The model (~80 MB) downloads once on first use.
 Turn auto-send off in Settings to review the text before sending.
 
+## Undo, keyboard and accessibility
+
+- Every calendar change (yours or the assistant's) shows an **Undo** toast; `Ctrl+Z` undoes the last one. Undo works
+  across Google sync: a deleted event that already left Google is re-created. Whole-series changes can be undone until
+  they sync.
+- Events are keyboard-operable: Tab to them, `Enter` opens, `Delete` removes (with undo), `↑` `↓` move between the day's
+  events. Dialogs keep focus inside and return it when closed; toasts and chat are announced to screen readers.
+
 ## How blocking works
 
 Each calendar entry can have a **block type** (Focus, Meeting, ...). Types define apps (process names such as
 `discord.exe`) and websites. While an entry with that type is active:
 
+- Choose apps from what's open (Settings → Blocking → Add app) or type a program name; websites are added as chips.
 - Blocked apps that are running get a warning popup with a countdown, then are force-closed. **Allow N min** is the
   soft override; it is limited per block (Settings -> Enforcement; set to 0 for strict mode).
 - Blocked sites are written to the hosts file between `# >>> TEMPO BLOCK` markers and removed when the block ends or

@@ -99,6 +99,16 @@ function remove(id) {
   return true;
 }
 
+const archived = () => all().filter((h) => h.archived);
+
+function restore(id) {
+  const h = byId(id);
+  if (!h) return false;
+  delete h.archived;
+  changed();
+  return true;
+}
+
 function reorder(ids) {
   const pos = new Map(ids.map((id, i) => [id, i]));
   const arch = all().filter((h) => h.archived);
@@ -221,6 +231,6 @@ function find(query) {
 const goalText = (h) => (h.kind === 'number' && h.target != null ? `${h.direction === 'atmost' ? '≤' : '≥'} ${h.target}${h.unit ? ' ' + h.unit : ''}` : '');
 
 module.exports = {
-  bus, list, save, remove, reorder, byId, find, day, range, logEntry, stats, statsFor, derive, meets, scheduled, goalText,
+  bus, list, save, remove, restore, archived, reorder, byId, find, day, range, logEntry, stats, statsFor, derive, meets, scheduled, goalText,
   todayStr, ymd, parseYmd,
 };

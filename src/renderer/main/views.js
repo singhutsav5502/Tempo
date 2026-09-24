@@ -53,7 +53,8 @@ function chipEl(e) {
   const t = new Date(e.start);
   const marks = `${blocksSomething(e) ? '⛨' : ''}${e.recurring ? '↻' : ''}${e.description ? '≡' : ''}`;
   return h('div', {
-    class: `mchip${e.allDay ? ' allday' : ''}`, style: `--c:${colorOf(e)}`, 'data-id': e.id,
+    class: `mchip${e.allDay ? ' allday' : ''}`, style: `--c:${colorOf(e)}`, 'data-id': e.id, tabindex: '0', role: 'button',
+    'aria-label': `${e.title}${e.allDay ? ', all day' : `, ${fmtTime(t)}`}`,
     draggable: e.allDay ? false : 'true',
     title: `${e.title}${e.allDay ? '' : ` · ${fmtTime(t)} – ${fmtTime(new Date(e.end))}`}${e.description ? `\n${e.description.slice(0, 200)}` : ''}`,
   }, e.allDay ? null : h('span', { class: 'tm' }, shortTime(t)), h('span', { class: 'tt' }, e.title), marks && h('span', { class: 'ic' }, marks));
@@ -68,6 +69,7 @@ function fillMonthCell(cell, capacity) {
 
 function initMonth() {
   const root = $('#month');
+  root.addEventListener('keydown', eventKeys);
 
   root.addEventListener('click', (ev) => {
     const cell = ev.target.closest('.mcell');

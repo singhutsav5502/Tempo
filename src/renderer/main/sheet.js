@@ -36,11 +36,11 @@ function habitRow({ habit, entry, status, scheduled }, date, stat) {
   const value = entry?.value;
 
   const tick = h('button', {
-    class: `tick${status === 'done' ? ' on' : ''}${status === 'done' && !manual ? ' auto' : ''}`, title: 'Done',
+    class: `tick${status === 'done' ? ' on' : ''}${status === 'done' && !manual ? ' auto' : ''}`, title: 'Done', 'aria-label': `${habit.name}: mark done`, 'aria-pressed': status === 'done' ? 'true' : 'false',
     onclick: () => logHabit(date, habit.id, { status: entry?.manual && entry.status === 'done' ? null : 'done' }),
   }, '✓');
   const cross = h('button', {
-    class: `cross${status === 'missed' ? ' on' : ''}${status === 'missed' && !manual ? ' auto' : ''}`, title: 'Missed',
+    class: `cross${status === 'missed' ? ' on' : ''}${status === 'missed' && !manual ? ' auto' : ''}`, title: 'Missed', 'aria-label': `${habit.name}: mark missed`, 'aria-pressed': status === 'missed' ? 'true' : 'false',
     onclick: () => logHabit(date, habit.id, { status: entry?.manual && entry.status === 'missed' ? null : 'missed' }),
   }, '✕');
 
@@ -49,7 +49,7 @@ function habitRow({ habit, entry, status, scheduled }, date, stat) {
   if (isNum) {
     const step = numberStep(habit);
     const input = h('input', {
-      type: 'number', class: 'hnum', step: 'any', min: '0', placeholder: '–',
+      type: 'number', class: 'hnum', step: 'any', min: '0', placeholder: '–', 'aria-label': `${habit.name} amount`,
       value: value ?? '', onchange: (e) => logHabit(date, habit.id, { value: e.target.value === '' ? null : Number(e.target.value) }),
     });
     numberCtl = h('div', { class: 'numctl' },
@@ -65,11 +65,11 @@ function habitRow({ habit, entry, status, scheduled }, date, stat) {
   }
 
   const note = h('input', {
-    type: 'text', class: `hnote${entry?.note ? ' has' : ''}`, placeholder: 'Note', value: entry?.note || '',
+    type: 'text', class: `hnote${entry?.note ? ' has' : ''}`, placeholder: 'Note', 'aria-label': `${habit.name} note`, value: entry?.note || '',
     onchange: (e) => logHabit(date, habit.id, { note: e.target.value }),
   });
 
-  const noteBtn = h('button', { class: 'notebtn', title: 'Add a note', onclick: (e) => { const row = e.target.closest('.hrow'); row.classList.toggle('noting'); row.querySelector('.hnote').focus(); } }, '✎');
+  const noteBtn = h('button', { class: 'notebtn', title: 'Add a note', 'aria-label': `Note for ${habit.name}`, onclick: (e) => { const row = e.target.closest('.hrow'); row.classList.toggle('noting'); row.querySelector('.hnote').focus(); } }, '✎');
   const meta = [goalText(habit), !scheduled && 'rest day', stat && stat.streak > 1 && `🔥 ${stat.streak} day streak`].filter(Boolean).join(' · ');
   return h('div', { class: `hrow${status ? ` ${status}` : ''}${scheduled ? '' : ' rest'}`, style: `--c:${habit.color}` },
     h('div', { class: 'hdot' }),
@@ -124,11 +124,12 @@ function matrixEl(rows, range, stats, selected) {
         const entry = range[key]?.[habit.id];
         const status = tempoDerive(habit, entry);
         const sched = habit.days.includes(d.getDay());
-        const sym = status === 'done' ? '✓' : status === 'missed' ? '✕' : status === 'skip' ? '–' : sched && key <= todayKey ? '·' : '';
+        const unlogged = !status && sched && key < todayKey && (!habit.created || key >= habit.created);
+        const sym = status === 'done' ? '✓' : status === 'missed' ? '✕' : status === 'skip' ? '–' : unlogged ? '✕' : sched && key === todayKey ? '·' : '';
         const num = habit.kind === 'number' && entry && entry.value != null ? shortNumber(entry.value) : '';
         return h('button', {
-          class: `mc ${status || 'none'}${sched ? '' : ' off'}${key === selected ? ' sel' : ''}${key === todayKey ? ' today' : ''}`,
-          title: `${d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}${entry?.value != null ? ` · ${entry.value}${habit.unit ? ' ' + habit.unit : ''}` : ''}${status ? ` · ${status}` : ''}${entry?.note ? ` · ${entry.note}` : ''}`,
+          class: `mc ${status || 'none'}${unlogged ? ' unlogged' : ''}${sched ? '' : ' off'}${key === selected ? ' sel' : ''}${key === todayKey ? ' today' : ''}`,
+          title: `${d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}${entry?.value != null ? ` · ${entry.value}${habit.unit ? ' ' + habit.unit : ''}` : ''}${status ? ` · ${status}` : ''}${entry?.note ? ` · ${entry.note}` : ''}${unlogged ? ' · not logged (counts as missed)' : ''}`,
           onclick: () => { state.sheetDate = d; applyPage(); renderSheet(); },
         }, num ? h('span', { class: 'mv' }, num) : sym);
       }),
@@ -191,6 +192,13 @@ async function openHabitEditor() {
       h('div', { style: 'font-weight:600;font-size:15px' }, 'Your goals'),
       h('div', { class: 'hint', style: 'margin:-6px 0 0' }, 'Tick / cross goals are done or not. Number goals have a target: enter the actual number and the tick or cross follows. Days set when a goal counts. Categories group goals for analytics.'),
       h('div', { class: 'hcards' }, cards),
+      await (async () => {
+        const arch = await tempo.habits.archived();
+        if (!arch.length) return null;
+        return h('details', { class: 'more-opts' }, h('summary', {}, `Removed goals (${arch.length})`),
+          arch.map((g) => h('div', { class: 'row arch' }, h('span', { class: 'arch-name', style: `--c:${g.color}` }, g.name),
+            h('button', { class: 'btn', style: 'flex:none', onclick: async () => { await tempo.habits.restore(g.id); draw(); } }, 'Restore'))));
+      })(),
       h('datalist', { id: 'habit-cats' }, SUGGESTED_CATEGORIES.map((c) => h('option', { value: c }))),
       h('div', { class: 'actions' },
         h('button', { class: 'btn', onclick: async () => { await tempo.habits.save({ name: 'New goal', kind: 'check' }); draw(); } }, '+ Add goal'),

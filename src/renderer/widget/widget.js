@@ -14,6 +14,8 @@ let busy = false;
 let bot = null;          // assistant bubble currently receiving text
 let typing = null;
 let blocker = null;
+let changedThisTurn = 0;
+tempo.events.onUndoable(() => { if (busy) changedThisTurn++; });
 
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; };
 const fmtTime = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -143,6 +145,17 @@ tempo.chat.onEvent((m) => {
   } else if (m.type === 'end') {
     bot = null;
     setBusy(false);
+    if (changedThisTurn) {
+      const n = changedThisTurn; changedThisTurn = 0;
+      const b = el('button', 'undo-chip', n > 1 ? `Undo these ${n} changes` : 'Undo that change');
+      b.onclick = async () => {
+        b.disabled = true;
+        let msg = '';
+        for (let i = 0; i < n; i++) { const r = await tempo.events.undo(); msg = r.message; if (!r.ok) break; }
+        b.textContent = n > 1 ? 'Undone' : msg.replace(/^Undone: /, 'Undone: ');
+      };
+      msgs.append(b);
+    }
   }
   scrollDown();
 });

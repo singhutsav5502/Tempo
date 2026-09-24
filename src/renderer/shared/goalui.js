@@ -44,6 +44,8 @@ const GoalUI = (() => {
     const btn = (kind, label, target) => {
       const b = el('button', `tbtn ${kind}${status === target ? ' on' : ''}${status === target && !manual ? ' auto' : ''}`, label);
       b.title = target === 'done' ? 'Done' : 'Missed';
+      b.setAttribute('aria-label', `${habit.name}: mark ${target === 'done' ? 'done' : 'missed'}`);
+      b.setAttribute('aria-pressed', status === target ? 'true' : 'false');
       b.onclick = () => onLog(habit.id, { status: entry?.manual && entry.status === target ? null : target });
       return b;
     };
@@ -61,10 +63,13 @@ const GoalUI = (() => {
       input.type = 'number'; input.step = 'any'; input.min = '0';
       input.placeholder = '–';
       input.value = entry?.value ?? '';
+      input.setAttribute('aria-label', `${habit.name} amount${habit.unit ? ` (${habit.unit})` : ''}`);
       input.onchange = () => onLog(habit.id, { value: input.value === '' ? null : Number(input.value) });
       const minus = el('button', 'step', '−');
+      minus.setAttribute('aria-label', `${habit.name}: minus ${step}`);
       minus.onclick = () => onLog(habit.id, { value: Math.max(0, (entry?.value ?? 0) - step) });
       const plus = el('button', 'step', '+');
+      plus.setAttribute('aria-label', `${habit.name}: plus ${step}`);
       plus.onclick = () => onLog(habit.id, { value: (entry?.value ?? 0) + step });
       const num = el('div', 'tnum');
       num.append(minus, input, plus);

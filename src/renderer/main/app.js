@@ -13,6 +13,7 @@ const RAIL_WIDE = 1360; // at least this wide: the goals panel is docked; otherw
 const state = {
   railCollapsed: false, // user choice while the window is wide
   railOverlay: false,   // slide-over opened from the slim strip
+  settingsTab: 'connections',
   page: 'calendar', // 'calendar' | 'sheet'
   sheetDate: startOfDay(new Date()),
   view: 'week',
@@ -115,11 +116,18 @@ function applyCustomInputs() {
   loadEvents();
 }
 
-function toast(msg, ms = 3200) {
+function toast(msg, ms = 3200, action = null) {
   const t = $('#toast');
-  t.textContent = msg; t.hidden = false;
+  t.replaceChildren(h('span', {}, msg), action && h('button', { class: 'toast-act', onclick: () => { t.hidden = true; action.run(); } }, action.label));
+  t.hidden = false;
   clearTimeout(toast.t);
   toast.t = setTimeout(() => { t.hidden = true; }, ms);
+}
+
+async function undoLast() {
+  const r = await tempo.events.undo();
+  toast(r.message, r.ok ? 3000 : 6000);
+  loadEvents();
 }
 
 // ---- data -------------------------------------------------------------------
@@ -293,6 +301,8 @@ function eventEl({ e, s, t, lane, lanes, day }) {
     style: `--c:${colorOf(e)};top:${top}px;height:${height}px;left:calc(${lane / lanes * 100}% + 2px);width:calc(${100 / lanes}% - 6px)`,
     'data-id': e.id,
     'data-clipped': clipped ? '1' : false,
+    tabindex: '0', role: 'button',
+    'aria-label': `${e.title}, ${fmtTime(start)} to ${fmtTime(end)}${blocksSomething(e) ? `, ${typeById(e.type).name} block` : ''}${e.recurring ? ', repeats' : ''}${e.description ? ', has notes' : ''}`,
     title: `${e.title}\n${fmtTime(start)} – ${fmtTime(end)}${e.description ? `\n${e.description.slice(0, 200)}` : ''}`,
   }, h('div', { class: 't' }, e.title), h('div', { class: 's' }, `${e.recurring ? '↻ ' : ''}${e.description ? '≡ ' : ''}${fmtTime(start)} – ${fmtTime(end)}`),
     e.description && !short && height >= 48 ? h('div', { class: 'n' }, e.description.split('\n')[0]) : null);
@@ -361,9 +371,34 @@ function minutesAt(col, y) {
   return Math.max(H0() * 60, Math.min(H1() * 60, H0() * 60 + (y - r.top) / HOUR_H * 60));
 }
 
+// Enter/Space opens an event, Delete removes it (with undo), arrows move focus between events of the day.
+async function eventKeys(ev) {
+  const el = ev.target.closest('.ev, .mchip');
+  if (!el) return;
+  const item = state.events.find((x) => x.id === el.dataset.id);
+  if (!item) return;
+  if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openEditor(item); return; }
+  if (ev.key === 'Delete' || ev.key === 'Backspace') {
+    ev.preventDefault();
+    let scope = 'this';
+    if (item.recurring) { scope = await askScope('Delete'); if (!scope) return; }
+    await tempo.events.remove(item.id, scope);
+    loadEvents();
+    return;
+  }
+  if (el.classList.contains('ev') && (ev.key === 'ArrowDown' || ev.key === 'ArrowUp')) {
+    ev.preventDefault(); ev.stopPropagation();
+    const col = [...el.parentElement.querySelectorAll('.ev')].sort((a, b) => a.offsetTop - b.offsetTop);
+    const i = col.indexOf(el);
+    const next = col[i + (ev.key === 'ArrowDown' ? 1 : -1)];
+    if (next) next.focus();
+  }
+}
+
 function initGrid() {
   const grid = $('#grid');
   let drag = null;
+  grid.addEventListener('keydown', eventKeys);
 
   grid.addEventListener('pointerdown', (ev) => {
     if (ev.button !== 0) return;
@@ -436,13 +471,32 @@ function initGrid() {
 
 // ---- event editor -----------------------------------------------------------------------------------
 
+let modalReturnFocus = null;
+
+// Keeps Tab inside the topmost dialog.
+function trapTab(e) {
+  if (e.key !== 'Tab') return;
+  const layers = $('#modal-root').querySelectorAll('.scrim');
+  const top = layers[layers.length - 1];
+  if (!top) return;
+  const f = [...top.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"]')].filter((x) => !x.disabled && x.offsetParent);
+  if (!f.length) return;
+  if (!top.contains(document.activeElement)) { e.preventDefault(); f[0].focus(); return; }
+  if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); } else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+}
+
 function openModal(node) {
   const root = $('#modal-root');
-  const scrim = h('div', { class: 'scrim', onmousedown: (e) => { if (e.target === scrim) closeModal(); } }, node);
+  if (!root.children.length) modalReturnFocus = document.activeElement;
+  const scrim = h('div', { class: 'scrim', onmousedown: (e) => { if (e.target === scrim) closeModal(); }, onkeydown: trapTab }, node);
   root.replaceChildren(scrim);
   return scrim;
 }
-const closeModal = () => $('#modal-root').replaceChildren();
+function closeModal() {
+  $('#modal-root').replaceChildren();
+  const back = modalReturnFocus; modalReturnFocus = null;
+  if (back && back.isConnected) back.focus();
+}
 
 const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 
@@ -627,86 +681,6 @@ function hourSelect(s, key, min, max) {
   }, Array.from({ length: max - min + 1 }, (_, i) => h('option', { value: min + i, selected: s[key] === min + i }, min + i === 24 ? 'midnight' : fmtHour(min + i))));
 }
 
-function drawSettings() {
-  const d = $('#drawer'); const s = state.settings; const g = state.google; const b = state.blocker;
-  const scroll = d.scrollTop;
-
-  const clientId = h('input', { type: 'text', value: s.googleClientId, placeholder: 'xxxx.apps.googleusercontent.com', onchange: (e) => saveSettings({ googleClientId: e.target.value.trim() }) });
-  const clientSecret = h('input', { type: 'password', placeholder: s.hasGoogleSecret ? '•••••••• saved' : 'GOCSPX-…', onchange: async (e) => { await saveSettings({ googleClientSecret: e.target.value.trim() }); e.target.value = ''; drawSettings(); } });
-  const apiKey = h('input', { type: 'password', placeholder: s.hasAnthropicKey ? '•••••••• saved' : 'sk-ant-…', onchange: async (e) => { await saveSettings({ anthropicKey: e.target.value.trim() }); e.target.value = ''; drawSettings(); } });
-  const model = h('input', { type: 'text', value: s.model, list: 'models', onchange: (e) => saveSettings({ model: e.target.value.trim() }) });
-  const provider = h('select', { onchange: async (e) => { await saveSettings({ provider: e.target.value }); drawSettings(); } },
-    h('option', { value: 'claude-code', selected: s.provider !== 'api' }, 'Claude Code (my Claude login)'),
-    h('option', { value: 'api', selected: s.provider === 'api' }, 'Anthropic API key'));
-  const ccModel = h('select', { onchange: (e) => saveSettings({ ccModel: e.target.value }) },
-    [['sonnet', 'Sonnet (fast)'], ['opus', 'Opus (smartest)'], ['haiku', 'Haiku (fastest)']].map(([v, l]) => h('option', { value: v, selected: s.ccModel === v }, l)));
-  const models = h('datalist', { id: 'models' }, ['claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5'].map((m) => h('option', { value: m })));
-
-  const num = (key, min, max) => h('input', { type: 'number', min, max, value: s[key], onchange: (e) => saveSettings({ [key]: Math.max(min, Math.min(max, Number(e.target.value) || 0)) }) });
-
-  const typeCards = s.types.map((t, i) => {
-    const patch = (p) => { s.types[i] = { ...t, ...p }; return saveSettings({ types: s.types }); };
-    return h('div', { class: 'type-card' },
-      h('div', { class: 'head' },
-        h('input', { type: 'color', value: t.color, onchange: (e) => patch({ color: e.target.value }).then(() => loadEvents()) }),
-        h('input', { type: 'text', value: t.name, onchange: (e) => patch({ name: e.target.value.trim() || t.name }) }),
-        h('button', { class: 'icon-btn', title: 'Delete type', onclick: async () => { s.types.splice(i, 1); await saveSettings({ types: s.types }); drawSettings(); loadEvents(); } }, '✕')),
-      field('Apps to close (process names)', h('textarea', { spellcheck: 'false', placeholder: 'e.g. discord.exe, steam.exe', onchange: (e) => patch({ apps: splitList(e.target.value) }) }, t.apps.join('\n'))),
-      field('Websites to block', h('textarea', { spellcheck: 'false', placeholder: 'e.g. youtube.com, reddit.com', onchange: (e) => patch({ sites: splitList(e.target.value) }) }, t.sites.join('\n'))));
-  });
-
-  const googleStatus = g.connected
-    ? h('div', { class: 'status-line' }, h('span', { class: `dot ${g.error ? 'err' : 'ok'}` }), g.error ? g.error : `Connected${g.lastSync ? ` · synced ${timeAgo(g.lastSync)}` : ''}`)
-    : h('div', { class: 'status-line' }, h('span', { class: 'dot' }), 'Not connected');
-
-  d.replaceChildren(
-    h('div', { class: 'row' }, h('h2', {}, 'Settings'), h('button', { class: 'icon-btn', style: 'flex:none', onclick: () => { d.hidden = true; } }, '✕')),
-
-    h('section', {}, h('h3', {}, 'Google Calendar'),
-      field('OAuth client ID', clientId), field('OAuth client secret', clientSecret, 'Desktop-app credentials from Google Cloud. Stored encrypted on this PC.'),
-      googleStatus,
-      h('div', { class: 'row' },
-        g.connected
-          ? [h('button', { class: 'btn', onclick: () => tempo.google.sync() }, 'Sync now'), h('button', { class: 'btn danger', onclick: async () => { state.google = await tempo.google.disconnect(); loadEvents(); drawSettings(); } }, 'Disconnect')]
-          : h('button', { class: 'btn primary', onclick: async (e) => { e.target.textContent = 'Waiting for browser…'; try { state.google = await tempo.google.connect(); loadEvents(); } catch (err) { toast(err.message); } drawSettings(); } }, 'Connect Google'))),
-
-    h('section', {}, h('h3', {}, 'Assistant'),
-      field('Powered by', provider, s.provider === 'api'
-        ? 'Calls the Anthropic API directly with your own key (billed per use).'
-        : 'Runs your installed Claude Code in the background using your Claude login. No API key needed.'),
-      s.provider === 'api'
-        ? [field('Anthropic API key', apiKey, 'Stored encrypted on this PC and only sent to Anthropic.'),
-          field('Model', model, 'claude-opus-5 is the most capable; claude-sonnet-5 is faster and cheaper.'), models]
-        : field('Model', ccModel, 'Sonnet is the fastest for everyday scheduling; Opus is smarter but slower.')),
-
-    h('section', {}, h('h3', {}, 'Block types'),
-      h('div', { class: 'hint', style: 'margin:-2px 0 12px' }, 'Give a calendar entry one of these types and its apps and sites are blocked while it is active.'),
-      typeCards,
-      h('button', { class: 'btn', onclick: async () => { s.types.push({ id: `t${Date.now().toString(36)}`, name: 'New type', color: '#7c93ff', apps: [], sites: [] }); await saveSettings({ types: s.types }); drawSettings(); } }, '+ Add block type')),
-
-    h('section', {}, h('h3', {}, 'Enforcement'),
-      h('div', { class: 'grid2' }, field('Overrides / block', num('overridesPerBlock', 0, 20)), field('Override minutes', num('overrideMinutes', 1, 60)), field('Warning seconds', num('warnSeconds', 3, 120))),
-      h('div', { class: 'hint', style: 'margin:-6px 0 14px' }, 'Set overrides to 0 for strict mode: blocked apps close after the warning, no exceptions.'),
-      h('div', { class: 'status-line' }, h('span', { class: `dot ${b.sitesReady ? 'ok' : ''}` }), b.sitesReady ? 'Website blocking is enabled' : 'Website blocking needs a one-time permission'),
-      !b.sitesReady && h('button', { class: 'btn primary', onclick: async () => { try { state.blocker = await tempo.blocker.enableSites(); toast('Website blocking enabled.'); } catch (err) { toast(err.message); } drawSettings(); } }, 'Enable website blocking'),
-      !b.sitesReady && h('div', { class: 'hint' }, 'Shows one Windows permission prompt so Tempo can edit the hosts file. After that it runs without admin rights.')),
-
-    h('section', {}, h('h3', {}, 'General'),
-      h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.launchAtStartup, onchange: (e) => saveSettings({ launchAtStartup: e.target.checked }) }), 'Launch Tempo when I sign in to Windows'),
-      h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-bottom:6px' },
-        field('Day view starts at', hourSelect(s, 'dayStartHour', 0, 20)), field('Day view ends at', hourSelect(s, 'dayEndHour', 4, 24))),
-      h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-bottom:0' },
-        field('Morning goals reminder', h('input', { type: 'time', value: s.goalsMorning || '', onchange: (e) => saveSettings({ goalsMorning: e.target.value }) })),
-        field('Evening reminder (if goals are open)', h('input', { type: 'time', value: s.goalsEvening || '', onchange: (e) => saveSettings({ goalsEvening: e.target.value }) }))),
-      h('div', { class: 'hint', style: 'margin:-6px 0 10px' }, 'Clear a time to turn that reminder off.'),
-      h('label', { class: 'check', style: 'margin-top:10px' }, h('input', { type: 'checkbox', checked: s.voiceAutoSend, onchange: (e) => saveSettings({ voiceAutoSend: e.target.checked }) }), 'Send voice commands automatically when I stop talking'),
-      h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-top:14px' },
-        hotkeyField('Ask Tempo (chat) hotkey', 'hotkeyChat'), hotkeyField('Open calendar hotkey', 'hotkeyCalendar')),
-      h('div', { class: 'hint', style: 'margin-top:-6px' }, 'Chat hotkey opens the chat and listens; press it again to send. Calendar hotkey toggles the calendar. Backspace clears one.'),
-      h('div', { class: 'row', style: 'margin-top:14px' }, h('button', { class: 'btn', onclick: () => { $('#drawer').hidden = true; openWizard(); } }, 'Run setup again'), h('button', { class: 'btn', onclick: () => { $('#drawer').hidden = true; openShortcuts(); } }, 'Keyboard shortcuts'))));
-  d.scrollTop = scroll;
-}
-
 // ---- boot -------------------------------------------------------------------------------------------
 
 function initChrome() {
@@ -842,6 +816,11 @@ async function main() {
   setInterval(renderRail, 60000); // also rolls the panel over at midnight
   tempo.onError((m) => toast(m));
   tempo.nav.onOpenSheet(() => setPage('sheet'));
+  tempo.events.onUndoable((u) => toast(u.label, 6000, { label: 'Undo', run: undoLast }));
+  tempo.settings.onChanged(async () => { state.settings = await tempo.settings.get(); if (!$('#drawer').hidden) drawSettings(); });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey && !e.target.matches('input, textarea, select') && !document.querySelector('.wiz-scrim')) { e.preventDefault(); undoLast(); }
+  });
   tempo.nav.onOpenSettings(() => openSettings(true));
   setInterval(() => { updateNowLine(); renderChips(); }, 30000);
 }

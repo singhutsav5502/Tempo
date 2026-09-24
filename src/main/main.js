@@ -9,6 +9,7 @@ const stt = require('./stt');
 const habits = require('./habits');
 const reminders = require('./reminders');
 const apps = require('./apps');
+const fullscreen = require('./fullscreen');
 const claudeCode = require('./claudeCode');
 const fs = require('fs');
 
@@ -113,7 +114,7 @@ function createWidget() {
   widgetWin.setAlwaysOnTop(true, 'screen-saver');
   widgetWin.setVisibleOnAllWorkspaces(true);
   widgetWin.loadFile(R('widget', 'index.html'));
-  widgetWin.once('ready-to-show', () => widgetWin.showInactive());
+  widgetWin.once('ready-to-show', applyWidgetVisibility);
   widgetWin.on('moved', () => {
     const b = widgetWin.getBounds();
     const s = store.get().widget;
@@ -197,11 +198,38 @@ function createTray() {
   buildTrayMenu();
 }
 
+// The widget shows unless the person hid it, or (when that setting is on) a full-screen app is in front.
+function widgetShouldShow() {
+  const s = store.get().settings;
+  return s.widgetVisible !== false && !(s.widgetHideFullscreen && fullscreen.isFullscreen());
+}
+
+function applyWidgetVisibility() {
+  if (!widgetWin) return;
+  const s = store.get().settings;
+  if (s.widgetHideFullscreen) fullscreen.start(); else fullscreen.stop();
+  if (widgetShouldShow()) { if (!widgetWin.isVisible()) widgetWin.showInactive(); } else if (widgetWin.isVisible()) {
+    if (widgetOpen) setWidgetOpen(false);
+    widgetWin.hide();
+  }
+  if (tray) buildTrayMenu();
+}
+
+function setWidgetVisible(v) {
+  store.get().settings.widgetVisible = v;
+  store.save();
+  applyWidgetVisibility();
+  broadcast('settings:changed');
+}
+
+fullscreen.bus.on('change', applyWidgetVisibility);
+
 function buildTrayMenu() {
-  const { hotkeyChat, hotkeyCalendar } = store.get().settings;
+  const { hotkeyChat, hotkeyCalendar, widgetVisible } = store.get().settings;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Ask Tempo', accelerator: hotkeyChat || undefined, registerAccelerator: false, click: openChat },
     { label: 'Open calendar', accelerator: hotkeyCalendar || undefined, registerAccelerator: false, click: showMain },
+    { label: widgetVisible === false ? 'Show floating widget' : 'Hide floating widget', click: () => setWidgetVisible(widgetVisible === false) },
     { type: 'separator' },
     { label: 'Quit Tempo', click: () => app.quit() },
   ]));
@@ -262,6 +290,10 @@ function registerIpc() {
   ipcMain.handle('events:remove', (_e, id, scope) => events.remove(id, scope));
   ipcMain.handle('events:next', () => ({ active: events.activeAt(), next: events.nextAfter() }));
 
+  ipcMain.handle('events:undo', () => events.undo());
+  ipcMain.handle('events:can-undo', () => events.canUndo());
+  ipcMain.handle('habits:archived', () => habits.archived());
+  ipcMain.handle('habits:restore', (_e, id) => habits.restore(id));
   ipcMain.handle('habits:list', () => habits.list());
   ipcMain.handle('habits:day', (_e, date) => habits.day(date));
   ipcMain.handle('habits:range', (_e, from, to) => habits.range(from, to));
@@ -280,6 +312,7 @@ function registerIpc() {
     if (googleClientSecret !== undefined) store.setSecret('googleClientSecret', googleClientSecret);
     if (types) s.types = types;
     store.save();
+    if ('widgetVisible' in patch || 'widgetHideFullscreen' in patch) applyWidgetVisibility();
     if ('provider' in patch || 'ccModel' in patch) ai.reset(); // new backend/model starts a fresh conversation
     if ('hotkeyChat' in patch || 'hotkeyCalendar' in patch) hotkeyErrors = registerHotkeys();
     if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!s.settings.launchAtStartup });
@@ -337,6 +370,7 @@ function registerIpc() {
 }
 
 events.bus.on('changed', () => broadcast('events:changed'));
+events.bus.on('undoable', (u) => broadcast('events:undoable', u));
 habits.bus.on('changed', () => broadcast('habits:changed'));
 nativeTheme.on('updated', () => { if (mainWin) mainWin.setTitleBarOverlay(overlay()); });
 
@@ -366,4 +400,4 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', (e) => e.preventDefault()); // keep running in the tray
-app.on('will-quit', () => { globalShortcut.unregisterAll(); blocker.stop(); reminders.stop(); ai.stop(); stt.stop(); store.flush(); });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); blocker.stop(); reminders.stop(); fullscreen.stop(); ai.stop(); stt.stop(); store.flush(); });

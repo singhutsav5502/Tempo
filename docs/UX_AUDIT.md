@@ -4,6 +4,18 @@
 daily goals (panel, sheet, widget tab), floating widget + chat + voice, settings, focus-block enforcement, notifications.
 **Date:** 2026-09-24. **Build:** tag `v0.1.0`. No product code was changed for this audit.
 
+## Status (after the three fix stages)
+
+| Finding | Status |
+|---|---|
+| U1 hidden blocking chip, U2 clipped top bar, U5 squeezed titles, U7 contrast, U8 naming, U9 placeholders, U12 dead-end errors, U18 panel width, U19 motion, U20 targets | Fixed in stage 1 (`d9155c9`) |
+| U3 first run, U13 editor, U15 block warning, U16 scroll position, U17 shortcuts | Fixed in stage 2 (`9599f51`) |
+| U4 app picker, U6 keyboard/screen reader, U10 undo, U11 widget control, U14 settings, U21 matrix | Fixed in stage 3 |
+| U22 voice send countdown, U23 chat history | Open |
+
+Measured after the fixes: every top-bar control reachable from 1700px down to the 820px minimum; all sampled text
+>= 4.5:1 in both themes; events, month chips and goal buttons keyboard-operable with spoken labels.
+
 ## Verdict
 
 Tempo's core interaction design is strong: one-click goal logging, drag-to-create events, live voice text, a calm

@@ -34,6 +34,8 @@ const DEFAULTS = {
     warnSeconds: 10,
     launchAtStartup: false,
     onboarded: false,
+    widgetVisible: true,
+    widgetHideFullscreen: false,
     dayStartHour: 0,
     dayEndHour: 24,
     goalsMorning: '09:00',

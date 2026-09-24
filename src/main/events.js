@@ -188,7 +188,7 @@ function normalize(input, existing = {}) {
   return ev;
 }
 
-function create(input) {
+function createImpl(input) {
   const { recurrence, ...fields } = input;
   const ev = normalize({ type: null, allDay: false, ...fields }, { id: crypto.randomUUID(), pending: 'create' });
   if (!recurrence) {
@@ -219,7 +219,7 @@ function timeDeltas(cur, patched) {
 const shift = (iso, ms) => new Date(Date.parse(iso) + ms).toISOString();
 
 /** scope: 'this' (default) edits one occurrence; 'all' edits the whole series. */
-function update(id, patch, scope = 'this') {
+function updateImpl(id, patch, scope = 'this') {
   const cur = byId(id);
   if (!cur || cur.pending === 'delete') throw new Error(`No event with id ${id}`);
 
@@ -264,7 +264,7 @@ function update(id, patch, scope = 'this') {
   return cur;
 }
 
-function remove(id, scope = 'this') {
+function removeImpl(id, scope = 'this') {
   const cur = byId(id);
   if (!cur) return false;
 
@@ -289,6 +289,158 @@ function remove(id, scope = 'this') {
   return true;
 }
 
+// ---- undo -------------------------------------------------------------------------------
+// Every create/update/remove records how to reverse itself (including changes made by the assistant). Reversals check
+// what sync has already done: a deleted event that Google already removed is re-created rather than half-restored.
+// Whole-series changes can be undone until they have synced; after that undo says so instead of guessing.
+
+const UNDO_LIMIT = 30;
+const undoStack = [];
+let replaying = false;
+const FIELDS = ['title', 'type', 'start', 'end', 'description', 'allDay'];
+const pick = (e) => Object.fromEntries(FIELDS.map((k) => [k, e[k]]));
+const quote = (t) => `"${String(t || 'Untitled').slice(0, 40)}"`;
+
+function record(label, fn) {
+  if (replaying) return;
+  undoStack.push({ label, fn });
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  bus.emit('undoable', { label, depth: undoStack.length });
+}
+
+function undo() {
+  const u = undoStack.pop();
+  if (!u) return { ok: false, message: 'Nothing to undo.' };
+  replaying = true;
+  try {
+    const ok = u.fn() !== false;
+    return { ok, message: ok ? `Undone: ${u.label}` : `Can't undo ${u.label} any more: it has already synced to Google Calendar.` };
+  } catch (err) {
+    return { ok: false, message: `Couldn't undo: ${err.message}` };
+  } finally {
+    replaying = false;
+  }
+}
+
+const findSeries = (sr) => seriesList().includes(sr);
+const dropExdate = (sr, day) => { sr.exdates = (sr.exdates || []).filter((d) => d !== day); };
+
+function create(input) {
+  const out = createImpl(input);
+  if (out.virtual) {
+    const sr = seriesList().find((x) => x.id === out.seriesId);
+    record(`Added ${quote(out.title)}`, () => {
+      if (findSeries(sr)) { seriesList().splice(seriesList().indexOf(sr), 1); changed(); return true; }
+      const inst = sr.gid && store.get().events.find((e) => e.seriesGid === sr.gid);
+      if (!inst) return false;
+      removeImpl(inst.id, 'all');
+      return true;
+    });
+  } else {
+    record(`Added ${quote(out.title)}`, () => { if (!byId(out.id)) return false; removeImpl(out.id); return true; });
+  }
+  return out;
+}
+
+function update(id, patch, scope = 'this') {
+  const cur = byId(id);
+  if (!cur) return updateImpl(id, patch, scope);
+  const prev = pick(cur);
+  const verb = patch.start !== undefined && patch.start !== cur.start ? 'Moved' : 'Changed';
+
+  if (cur.virtual) {
+    const sr = seriesList().find((x) => x.id === cur.seriesId);
+    const before = { ...sr, exdates: [...(sr.exdates || [])] };
+    const out = updateImpl(id, patch, scope);
+    record(`${verb} ${quote(prev.title)}`, () => {
+      if (!findSeries(sr)) return false;
+      if (scope === 'all') Object.assign(sr, { title: before.title, type: before.type, description: before.description, start: before.start, end: before.end });
+      else { dropExdate(sr, localYmd(new Date(cur.start))); const ev = store.get().events.find((e) => e.id === out.id); if (ev) removeImpl(ev.id); }
+      changed();
+      return true;
+    });
+    return out;
+  }
+
+  if (scope === 'all' && cur.seriesGid) {
+    const out = updateImpl(id, patch, scope);
+    const op = opsList()[opsList().length - 1];
+    record(`${verb} all ${quote(prev.title)}`, () => {
+      const i = opsList().indexOf(op);
+      if (i < 0) return false;
+      opsList().splice(i, 1);
+      // Walk the cached instances back by the same amounts.
+      for (const e of store.get().events) {
+        if (e.seriesGid !== cur.seriesGid || e.pending === 'delete') continue;
+        e.title = prev.title; e.type = prev.type || null;
+        if (op.patch.description !== undefined) e.description = prev.description || '';
+        e.start = shift(e.start, -op.patch.dStart); e.end = shift(e.end, -op.patch.dEnd);
+      }
+      changed();
+      return true;
+    });
+    return out;
+  }
+
+  const out = updateImpl(id, patch, scope);
+  record(`${verb} ${quote(prev.title)}`, () => {
+    const c = byId(id);
+    if (!c || c.pending === 'delete') return false;
+    updateImpl(id, prev);
+    return true;
+  });
+  return out;
+}
+
+function remove(id, scope = 'this') {
+  const cur = byId(id);
+  if (!cur) return false;
+  const label = `Deleted ${quote(cur.title)}${scope === 'all' && cur.recurring ? ' (all events)' : ''}`;
+
+  if (cur.virtual) {
+    const sr = seriesList().find((x) => x.id === cur.seriesId);
+    const day = localYmd(new Date(cur.start));
+    const ok = removeImpl(id, scope);
+    record(label, () => {
+      if (scope === 'all') { if (!findSeries(sr) && !sr.gid) { seriesList().push(sr); changed(); return true; } return false; }
+      if (!findSeries(sr)) return false;
+      dropExdate(sr, day); changed(); return true;
+    });
+    return ok;
+  }
+
+  if (scope === 'all' && cur.seriesGid) {
+    const copies = store.get().events.filter((e) => e.seriesGid === cur.seriesGid).map((e) => ({ ...e }));
+    const ok = removeImpl(id, scope);
+    const op = opsList()[opsList().length - 1];
+    record(label, () => {
+      const i = opsList().indexOf(op);
+      if (i < 0) return false;
+      opsList().splice(i, 1);
+      store.get().events.push(...copies);
+      changed();
+      return true;
+    });
+    return ok;
+  }
+
+  const copy = { ...cur };
+  const ok = removeImpl(id, scope);
+  record(label, () => {
+    const still = store.get().events.find((e) => e.id === copy.id);
+    if (still && still.pending === 'delete') { still.pending = 'update'; changed(); return true; } // not pushed yet
+    if (still) return false;
+    // Gone locally (and from Google, if it was synced): bring it back as a new event.
+    const { gid, etag, pending, descEdited, ...fields } = copy;
+    store.get().events.push({ ...fields, id: crypto.randomUUID(), pending: 'create', ...(copy.description ? { descEdited: true } : {}) });
+    changed();
+    return true;
+  });
+  return ok;
+}
+
+const canUndo = () => undoStack.length > 0;
+
 // Events whose time slot covers `now`. All-day events never trigger blocking.
 function activeAt(now = Date.now()) {
   return list(now - DAY, now + DAY).filter((e) => !e.allDay && Date.parse(e.start) <= now && now < Date.parse(e.end));
@@ -301,7 +453,7 @@ function nextAfter(now = Date.now()) {
 }
 
 module.exports = {
-  bus, list, byId, range, create, update, remove, activeAt, nextAfter, typeOf, types,
+  bus, list, byId, range, create, update, remove, undo, canUndo, activeAt, nextAfter, typeOf, types,
   changed, setSyncHook: (fn) => { syncHook = fn; },
   // used by google.js
   seriesList, opsList, rruleString, ymdHmsLocal, occurrences, localYmd,
