@@ -135,9 +135,23 @@ async function api(path, { method = 'GET', body, query } = {}) {
   return json;
 }
 
+// Google keeps notes as light HTML; Tempo edits plain text. Convert on the way in (links keep their URL).
+function plainText(html) {
+  return String(html || '')
+    .replace(/<a\s+[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, url, text) => (text.includes(url) ? text : `${text} (${url})`))
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|ul|ol)>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\n\u2022 ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 const toGoogle = (e) => ({
   summary: e.title,
-  description: e.description || undefined,
+  // Only send notes for new events or when they were edited here (an empty string clears them on Google).
+  ...(!e.gid || e.descEdited ? { description: e.description || '' } : {}),
   start: e.allDay ? { date: e.start } : { dateTime: e.start },
   end: e.allDay ? { date: e.end } : { dateTime: e.end },
   extendedProperties: { private: { tempoType: e.type || '' } },
@@ -152,7 +166,7 @@ function fromGoogle(g, existing) {
     recurring: !!g.recurringEventId,
     seriesGid: g.recurringEventId || undefined,
     title: g.summary || '(No title)',
-    description: g.description || '',
+    description: plainText(g.description),
     allDay,
     start: allDay ? g.start.date : new Date(g.start.dateTime).toISOString(),
     end: allDay ? g.end.date : new Date(g.end.dateTime).toISOString(),
@@ -191,7 +205,7 @@ async function pushOps() {
     } else if (op.type === 'series-update') {
       const m = await api(`/events/${op.gid}`);
       if (!m.gone) {
-        const body = { summary: op.patch.title, extendedProperties: { private: { ...(m.extendedProperties?.private || {}), tempoType: op.patch.type || '' } } };
+        const body = { summary: op.patch.title, ...(op.patch.description !== undefined ? { description: op.patch.description } : {}), extendedProperties: { private: { ...(m.extendedProperties?.private || {}), tempoType: op.patch.type || '' } } };
         if (op.patch.dStart || op.patch.dEnd) {
           body.start = { dateTime: new Date(Date.parse(m.start.dateTime) + op.patch.dStart).toISOString(), timeZone: m.start.timeZone || localTz() };
           body.end = { dateTime: new Date(Date.parse(m.end.dateTime) + op.patch.dEnd).toISOString(), timeZone: m.end.timeZone || localTz() };
@@ -233,6 +247,7 @@ async function push() {
       continue;
     }
     delete e.pending;
+    delete e.descEdited;
   }
 }
 
@@ -321,4 +336,4 @@ function start() {
   sync();
 }
 
-module.exports = { start, connect, disconnect, sync, ensureRange, getState, status };
+module.exports = { plainText, start, connect, disconnect, sync, ensureRange, getState, status };

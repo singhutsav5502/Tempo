@@ -245,15 +245,19 @@ function update(id, patch, scope = 'this') {
   if (scope === 'all' && cur.seriesGid) {
     const { dStart, dEnd } = timeDeltas(cur, next);
     const gid = cur.seriesGid;
-    opsList().push({ type: 'series-update', gid, patch: { title: next.title, type: next.type || '', dStart, dEnd } });
+    const descChanged = patch.description !== undefined && (patch.description || '') !== (cur.description || '');
+    opsList().push({ type: 'series-update', gid, patch: { title: next.title, type: next.type || '', dStart, dEnd, ...(descChanged ? { description: next.description || '' } : {}) } });
     for (const e of store.get().events) {
       if (e.seriesGid !== gid || e.pending === 'delete') continue;
       e.title = next.title; e.type = next.type || null;
+      if (descChanged) e.description = next.description || '';
       e.start = shift(e.start, dStart); e.end = shift(e.end, dEnd);
     }
     changed();
     return byId(id);
   }
+  // Remember that the notes were edited here, so an update that doesn't touch them never overwrites Google's copy.
+  if (patch.description !== undefined && (patch.description || '') !== (cur.description || '')) cur.descEdited = true;
   Object.assign(cur, next);
   if (cur.pending !== 'create') cur.pending = 'update';
   changed();

@@ -51,11 +51,11 @@ function renderMonth() {
 
 function chipEl(e) {
   const t = new Date(e.start);
-  const marks = `${blocksSomething(e) ? '⛨' : ''}${e.recurring ? '↻' : ''}`;
+  const marks = `${blocksSomething(e) ? '⛨' : ''}${e.recurring ? '↻' : ''}${e.description ? '≡' : ''}`;
   return h('div', {
     class: `mchip${e.allDay ? ' allday' : ''}`, style: `--c:${colorOf(e)}`, 'data-id': e.id,
     draggable: e.allDay ? false : 'true',
-    title: `${e.title}${e.allDay ? '' : ` · ${fmtTime(t)} – ${fmtTime(new Date(e.end))}`}`,
+    title: `${e.title}${e.allDay ? '' : ` · ${fmtTime(t)} – ${fmtTime(new Date(e.end))}`}${e.description ? `\n${e.description.slice(0, 200)}` : ''}`,
   }, e.allDay ? null : h('span', { class: 'tm' }, shortTime(t)), h('span', { class: 'tt' }, e.title), marks && h('span', { class: 'ic' }, marks));
 }
 

@@ -292,48 +292,17 @@ async function logHabit(id, patch) {
 
 async function renderToday() {
   const rows = await tempo.habits.day(localYmd());
-  const due = rows.filter((r) => r.scheduled);
-  const done = due.filter((r) => r.status === 'done').length;
-  $('#today-count').textContent = due.length ? `${done}/${due.length}` : '';
+  const s = GoalUI.summary(rows);
+  $('#today-count').textContent = s.due ? `${s.done}/${s.due}` : '';
+  const chip = $('#goals-chip');
+  $('#goals-num').textContent = `${s.done}/${s.due}`;
+  chip.className = `goals-chip ${!s.due ? 'none' : s.done === s.due ? 'all' : s.done ? 'some' : ''}`;
+  chip.title = s.due ? (s.open.length ? `To go: ${s.open.join(', ')}` : 'All of today\'s goals are done') : 'No goals scheduled today';
   if (tab !== 'today') return;
 
   const box = $('#today');
   const scroll = box.scrollTop;
-  const goal = (hb) => (hb.kind === 'number' && hb.target != null ? `${hb.direction === 'atmost' ? '≤' : '≥'} ${hb.target}${hb.unit ? ` ${hb.unit}` : ''}` : '');
-  const list = rows.map(({ habit, entry, status, scheduled }) => {
-    const manual = !!entry?.manual;
-    const btn = (kind, label, target) => {
-      const b = el('button', `tbtn ${kind}${status === target ? ' on' : ''}${status === target && !manual ? ' auto' : ''}`, label);
-      b.onclick = () => logHabit(habit.id, { status: entry?.manual && entry.status === target ? null : target });
-      return b;
-    };
-    const row = el('div', `trow${status ? ` ${status}` : ''}${scheduled ? '' : ' rest'}`);
-    row.style.setProperty('--c', habit.color);
-    const name = el('div', 'tname');
-    name.append(el('b', '', habit.name));
-    const sub = [goal(habit), !scheduled && 'rest day'].filter(Boolean).join(' · ');
-    if (sub) name.append(el('small', '', sub));
-    row.append(name);
-    if (habit.kind === 'number') {
-      const step = habit.target != null && habit.target >= 100 ? 50 : 1;
-      const input = el('input'); input.type = 'number'; input.step = 'any'; input.min = '0';
-      input.placeholder = habit.target != null ? String(habit.target) : '0';
-      input.value = entry?.value ?? '';
-      input.onchange = () => logHabit(habit.id, { value: input.value === '' ? null : Number(input.value) });
-      const minus = el('button', 'step', '−'); minus.onclick = () => logHabit(habit.id, { value: Math.max(0, (entry?.value ?? 0) - step) });
-      const plus = el('button', 'step', '+'); plus.onclick = () => logHabit(habit.id, { value: (entry?.value ?? 0) + step });
-      const num = el('div', 'tnum'); num.append(minus, input, plus);
-      row.append(num);
-    }
-    row.append(btn('cross', '✕', 'missed'), btn('tick', '✓', 'done'));
-    return row;
-  });
-
-  const head = el('div', 'tsum');
-  const big = el('b', '', `${done}`); const of = el('span', '', ` / ${due.length} done today`);
-  const left = el('div'); left.append(big, of); head.append(left);
-  const prog = el('div', 'tprog'); const fill = el('i'); fill.style.width = `${due.length ? (done / due.length) * 100 : 0}%`; prog.append(fill);
-  box.replaceChildren(head, prog, ...(list.length ? list : [el('div', 'tempty', 'No habits yet. Add some in the main window (checklist icon).')]));
+  box.replaceChildren(GoalUI.header(rows), ...(rows.length ? rows.map((r) => GoalUI.row(r, logHabit)) : [GoalUI.el('div', 'tempty', 'No habits yet. Add some in the main window (checklist icon).')]));
   box.scrollTop = scroll;
 }
 
@@ -351,6 +320,7 @@ $('#chat-btn').onclick = () => tempo.widget.setOpen(!open);
 $('#collapse').onclick = () => { voice?.cancel(); tempo.widget.setOpen(false); };
 $('#mic').onclick = toggleListening;
 $('#open-main').onclick = () => tempo.widget.openMain();
+$('#goals-chip').onclick = () => { tempo.widget.setOpen(true); setTab('today'); };
 $('#new-chat').onclick = async () => { await tempo.chat.reset(); bot = null; showEmpty(); };
 $('#composer').onsubmit = (e) => { e.preventDefault(); send($('#input').value); };
 $('#input').addEventListener('input', autosize);

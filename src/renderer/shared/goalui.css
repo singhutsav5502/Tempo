@@ -1,0 +1,29 @@
+/* Compact goal rows: used by the calendar's goals panel and the widget's Today tab. */
+.tsum { display: flex; align-items: baseline; justify-content: space-between; padding: 2px 4px 6px; }
+.tsum b { font-size: 26px; letter-spacing: -0.02em; }
+.tsum span { color: var(--muted); font-size: 12px; }
+.tprog { height: 5px; border-radius: 999px; background: var(--surface-2); margin: 0 4px 8px; overflow: hidden; }
+.tprog i { display: block; height: 100%; background: var(--ok); transition: width 0.3s; }
+.tleft { padding: 0 4px 10px; color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.tleft.all { color: var(--ok); font-weight: 600; }
+
+.trow { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px; background: var(--surface-2); border-left: 3px solid var(--c); margin-bottom: 6px; }
+.trow.open { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); }
+.trow.done { background: color-mix(in srgb, var(--ok) 12%, var(--surface-2)); }
+.trow.missed { background: color-mix(in srgb, var(--danger) 10%, var(--surface-2)); }
+.trow.rest { opacity: 0.55; }
+.tname { flex: 1; min-width: 0; }
+.tname b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tname small { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tnum { display: flex; align-items: center; gap: 2px; }
+.tnum input { width: 56px; text-align: center; padding: 5px 4px; font-weight: 600; }
+.tnum input::-webkit-inner-spin-button { display: none; }
+.tnum .step { width: 20px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); padding: 0; }
+.tnum .step:hover { background: var(--surface); color: var(--text); }
+.tbtn { flex: none; width: 30px; height: 30px; border-radius: 9px; border: 1.5px solid var(--border-strong); background: transparent; color: var(--muted); font-size: 14px; padding: 0; }
+.tbtn.tick:hover { border-color: var(--ok); color: var(--ok); }
+.tbtn.cross:hover { border-color: var(--danger); color: var(--danger); }
+.tbtn.tick.on { background: var(--ok); border-color: var(--ok); color: #0e0f13; }
+.tbtn.cross.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+.tbtn.auto { opacity: 0.65; }
+.tempty { color: var(--muted); padding: 18px 6px; text-align: center; }

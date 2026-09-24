@@ -35,6 +35,8 @@ const DEFAULTS = {
     launchAtStartup: false,
     dayStartHour: 0,
     dayEndHour: 24,
+    goalsMorning: '09:00',
+    goalsEvening: '20:00',
     voiceAutoSend: true,
     hotkeyChat: 'Control+Alt+T',
     hotkeyCalendar: 'Control+Alt+C',

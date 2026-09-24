@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, globalShortcut, ipcMain, screen, shell, session } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, globalShortcut, ipcMain, screen, shell, session, Notification } = require('electron');
 const path = require('path');
 const store = require('./store');
 const events = require('./events');
@@ -7,11 +7,12 @@ const blocker = require('./blocker');
 const ai = require('./ai');
 const stt = require('./stt');
 const habits = require('./habits');
+const reminders = require('./reminders');
 
 const R = (...p) => path.join(__dirname, '..', 'renderer', ...p);
 const PRELOAD = path.join(__dirname, 'preload.js');
 
-const WIDGET_COLLAPSED = { w: 340, h: 76 };
+const WIDGET_COLLAPSED = { w: 400, h: 76 };
 const WIDGET_EXPANDED = { w: 400, h: 600 };
 
 let mainWin = null;
@@ -22,6 +23,7 @@ let widgetOpen = false;
 const alertQueue = [];
 let alertShowing = null;
 
+app.setAppUserModelId('com.tempo.app'); // Windows needs this for toast notifications
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on('second-instance', () => showMain());
 
@@ -136,6 +138,19 @@ blocker.bus.on('alert-close', (id) => {
 });
 blocker.bus.on('state', (s) => broadcast('blocker:state', s));
 blocker.bus.on('error', (msg) => broadcast('app:error', msg));
+
+// ---- goal reminders -------------------------------------------------------
+
+function notifyGoals({ title, body }) {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title, body });
+  n.on('click', () => {
+    showMain();
+    const open = () => send(mainWin, 'app:open-sheet');
+    if (mainWin.webContents.isLoading()) mainWin.webContents.once('did-finish-load', open); else open();
+  });
+  n.show();
+}
 
 // ---- tray -----------------------------------------------------------------
 
@@ -283,6 +298,7 @@ app.whenReady().then(() => {
   createWidget();
   allowMicForWidget();
   createTray();
+  reminders.start(notifyGoals);
   hotkeyErrors = registerHotkeys();
   if (hotkeyErrors.length) {
     mainWin.webContents.once('did-finish-load', () => send(mainWin, 'app:error', `Couldn't claim ${hotkeyErrors.join(' and ')}: another app is using it. Pick a different one in Settings.`));
@@ -290,4 +306,4 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', (e) => e.preventDefault()); // keep running in the tray
-app.on('will-quit', () => { globalShortcut.unregisterAll(); blocker.stop(); ai.stop(); stt.stop(); store.flush(); });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); blocker.stop(); reminders.stop(); ai.stop(); stt.stop(); store.flush(); });

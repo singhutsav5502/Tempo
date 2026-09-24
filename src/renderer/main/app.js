@@ -9,6 +9,7 @@ const MAX_CUSTOM_DAYS = 14;
 const TIME_GRID_VIEWS = ['day', 'week', 'custom'];
 
 const state = {
+  rail: true, // goals panel beside the calendar
   page: 'calendar', // 'calendar' | 'sheet'
   sheetDate: startOfDay(new Date()),
   view: 'week',
@@ -135,6 +136,8 @@ function applyPage() {
   $('#cal').hidden = sheet;
   $('#sheet').hidden = !sheet;
   $('#view-seg').hidden = sheet;
+  $('#rail').hidden = sheet || !state.rail;
+  $('#rail-btn').classList.toggle('on', state.rail && !sheet);
   $('#sheet-btn').classList.toggle('on', sheet);
   if (sheet) {
     $('#custom-range').hidden = true;
@@ -146,7 +149,15 @@ function applyPage() {
 function setPage(page) {
   state.page = page;
   applyPage();
-  if (page === 'sheet') renderSheet(); else loadEvents();
+  if (page === 'sheet') renderSheet(); else { loadEvents(); renderRail(); }
+}
+
+function setRail(open) {
+  state.rail = open;
+  try { localStorage.setItem('tempo.rail', open ? '1' : '0'); } catch { /* storage unavailable */ }
+  applyPage();
+  if (open) renderRail();
+  if (state.view === 'month') requestAnimationFrame(() => renderMonth()); // the calendar just changed width
 }
 
 function render() {
@@ -251,7 +262,8 @@ function eventEl({ e, s, t, lane, lanes, day }) {
     style: `--c:${colorOf(e)};top:${top}px;height:${height}px;left:calc(${lane / lanes * 100}% + 2px);width:calc(${100 / lanes}% - 6px)`,
     'data-id': e.id,
     'data-clipped': clipped ? '1' : false,
-  }, h('div', { class: 't' }, e.title), h('div', { class: 's' }, `${e.recurring ? '↻ ' : ''}${fmtTime(start)} – ${fmtTime(end)}`));
+  }, h('div', { class: 't' }, e.title), h('div', { class: 's' }, `${e.recurring ? '↻ ' : ''}${e.description ? '≡ ' : ''}${fmtTime(start)} – ${fmtTime(end)}`),
+    e.description && !short && height >= 48 ? h('div', { class: 'n' }, e.description.split('\n')[0]) : null);
   // Only same-day events can be dragged; multi-day ones open the editor.
   if (!clipped && ymd(start) === ymd(new Date(end - 1))) el.append(h('div', { class: 'rz' }));
   return el;
@@ -429,6 +441,7 @@ function openEditor(existing, draft) {
   const to = h('input', { type: 'time', value: hm(end) });
   const hint = h('div', { class: 'hint' });
   const chips = h('div', { class: 'types' });
+  const notes = h('textarea', { class: 'notes', placeholder: 'Notes, links, agenda…', rows: '3' }, existing?.description || '');
 
   // Repeat controls (new events only; existing series are edited via the scope prompt)
   const repeat = h('select', {},
@@ -464,7 +477,7 @@ function openEditor(existing, draft) {
   const save = async () => {
     const s = parseLocal(date.value, from.value); const e = parseLocal(date.value, to.value);
     try {
-      const payload = { title: title.value, type, start: s.toISOString(), end: e.toISOString() };
+      const payload = { title: title.value, type, start: s.toISOString(), end: e.toISOString(), description: notes.value };
       if (existing) {
         let scope = 'this';
         if (existing.recurring) {
@@ -486,13 +499,14 @@ function openEditor(existing, draft) {
     closeModal(); loadEvents();
   };
 
-  const modal = h('div', { class: 'modal', onkeydown: (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') save(); if (e.key === 'Escape') closeModal(); } },
+  const modal = h('div', { class: 'modal', onkeydown: (e) => { if ((e.key === 'Enter' && e.target.tagName === 'INPUT') || (e.key === 'Enter' && e.ctrlKey)) save(); if (e.key === 'Escape') closeModal(); } },
     title,
     h('div', { class: 'row' }, date, from, to),
     existing
       ? existing.recurring && h('div', { class: 'hint', style: 'margin:0' }, `↻ ${existing.recurrenceText || 'Repeating event'}`)
       : h('div', {}, h('div', { class: 'lbl' }, 'Repeat'), repeatRow),
     h('div', {}, h('div', { class: 'lbl' }, 'Block type'), chips, hint),
+    h('div', {}, h('div', { class: 'lbl' }, 'Notes'), notes),
     h('div', { class: 'actions' },
       existing && h('button', { class: 'btn danger left', onclick: remove }, 'Delete'),
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
@@ -633,6 +647,10 @@ function drawSettings() {
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.launchAtStartup, onchange: (e) => saveSettings({ launchAtStartup: e.target.checked }) }), 'Launch Tempo when I sign in to Windows'),
       h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-bottom:6px' },
         field('Day view starts at', hourSelect(s, 'dayStartHour', 0, 20)), field('Day view ends at', hourSelect(s, 'dayEndHour', 4, 24))),
+      h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-bottom:0' },
+        field('Morning goals reminder', h('input', { type: 'time', value: s.goalsMorning || '', onchange: (e) => saveSettings({ goalsMorning: e.target.value }) })),
+        field('Evening reminder (if goals are open)', h('input', { type: 'time', value: s.goalsEvening || '', onchange: (e) => saveSettings({ goalsEvening: e.target.value }) }))),
+      h('div', { class: 'hint', style: 'margin:-6px 0 10px' }, 'Clear a time to turn that reminder off.'),
       h('label', { class: 'check', style: 'margin-top:10px' }, h('input', { type: 'checkbox', checked: s.voiceAutoSend, onchange: (e) => saveSettings({ voiceAutoSend: e.target.checked }) }), 'Send voice commands automatically when I stop talking'),
       h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-top:14px' },
         hotkeyField('Ask Tempo (chat) hotkey', 'hotkeyChat'), hotkeyField('Open calendar hotkey', 'hotkeyCalendar')),
@@ -646,6 +664,7 @@ function initChrome() {
   $('#prev').onclick = () => step(-1);
   $('#next').onclick = () => step(1);
   $('#sheet-btn').onclick = () => setPage(state.page === 'sheet' ? 'calendar' : 'sheet');
+  $('#rail-btn').onclick = () => { if (state.page === 'sheet') setPage('calendar'); else setRail(!state.rail); };
   $('#today').onclick = () => {
     const today = startOfDay(new Date());
     if (state.page === 'sheet') { state.sheetDate = today; applyPage(); renderSheet(); return; }
@@ -669,6 +688,7 @@ function initChrome() {
     else if (e.key === 'ArrowRight') step(1);
     else if (e.key === 't') $('#today').click();
     else if (e.key === 's') $('#sheet-btn').click();
+    else if (e.key === 'g') $('#rail-btn').click();
     else if (state.page === 'sheet') return;
     else { const v = { d: 'day', w: 'week', m: 'month', y: 'year', c: 'custom' }[e.key]; if (v) setView(v); }
   });
@@ -689,20 +709,27 @@ function scrollToNow() {
 
 async function main() {
   loadPrefs();
+  try { state.rail = localStorage.getItem('tempo.rail') !== '0'; } catch { /* default open */ }
   initChrome();
   initGrid();
   initMonth();
   initYear();
   [state.settings, state.google, state.blocker] = await Promise.all([tempo.settings.get(), tempo.google.state(), tempo.blocker.state()]);
   await loadEvents();
+  renderRail();
   scrollToNow();
 
   tempo.events.onChanged(async () => { state.settings = await tempo.settings.get(); loadEvents(); });
   tempo.google.onState((g) => { state.google = g; renderChips(); if (!$('#drawer').hidden) drawSettings(); });
   tempo.blocker.onState((b) => { state.blocker = b; renderChips(); });
   // Repaint the sheet when habits change elsewhere (e.g. the widget or the assistant), but never under someone's cursor.
-  tempo.habits.onChanged(() => { if (state.page === 'sheet' && !document.activeElement?.matches?.('#sheet input')) renderSheet(); });
+  tempo.habits.onChanged(() => {
+    if (state.page === 'sheet' && !document.activeElement?.matches?.('#sheet input')) renderSheet();
+    if (!document.activeElement?.matches?.('#rail input')) renderRail();
+  });
+  setInterval(renderRail, 60000); // also rolls the panel over at midnight
   tempo.onError((m) => toast(m));
+  tempo.nav.onOpenSheet(() => setPage('sheet'));
   setInterval(() => { updateNowLine(); renderChips(); }, 30000);
 }
 

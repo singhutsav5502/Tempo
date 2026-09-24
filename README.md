@@ -33,6 +33,14 @@ Hobby and Calories; **Edit habits** lets you rename, recolor, reorder, add and r
 - The widget has a **Today** tab for one-click check-offs, and the chat understands it: *"did gym, ate 1450 calories,
   skipped badminton"* or *"start tracking reading, at least 20 pages a day"*.
 
+Goals are kept in front of you on purpose:
+
+- A **Today's goals** panel sits beside the calendar (toggle with the target icon or `g`), showing what is still to go.
+  The icon carries a dot while goals are open.
+- The floating widget's pill shows a goals chip (`3/5`, green when done); click it to jump to the Today tab.
+- **Reminders**: a morning list of today's goals (default 9:00) and an evening notice if some are still open
+  (default 20:00). Times are in Settings; clear one to turn it off. Clicking a notification opens the sheet.
+
 Data lives in `tempo.json` as `habits` (definitions) and `habitLog` (`date -> habitId -> {status, value, note}`);
 removing a habit only archives it, so history stays available for analytics.
 
@@ -47,6 +55,13 @@ removing a habit only archives it, so history stays available for analytics.
 
 Month and year can look far beyond the default sync window, so Tempo pulls extra ranges from Google on demand
 (up to 3 years either side of today).
+
+## Event notes
+
+Every event has a **Notes** box (agenda, links, anything). Notes sync with Google Calendar's description field
+(Google's rich text is shown as plain text, and notes you haven't edited are never overwritten). Events with notes
+show a ≡ marker, tall ones preview the first line, and the assistant can read and write them
+(*"add the agenda to my design review"*).
 
 ## Repeating events
 

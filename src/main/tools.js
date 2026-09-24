@@ -30,6 +30,7 @@ const TOOLS = [
     start: { type: 'string', description: 'Local time YYYY-MM-DDTHH:mm, or YYYY-MM-DD for all_day' },
     end: { type: 'string', description: 'Local time YYYY-MM-DDTHH:mm. Ignored for all_day.' },
     type: { type: 'string', description: 'Block type id, e.g. focus. Omit for a plain event.' },
+    notes: { type: 'string', description: 'Free-text notes for the event: agenda, links, reminders.' },
     all_day: { type: 'boolean' },
     recurrence: {
       type: 'object',
@@ -46,6 +47,7 @@ const TOOLS = [
   }, ['title', 'start']),
   T('update_event', 'Change an existing event. Only pass the fields you want to change. type "none" clears the block type.', {
     id: { type: 'string' }, title: { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, type: { type: 'string' },
+    notes: { type: 'string', description: 'Replace the event notes; pass an empty string to clear them.' },
     scope: { type: 'string', enum: ['this', 'all'], description: 'For repeating events: this occurrence only (default) or the whole series. "all" can change title, type and time of day, not the day.' },
   }, ['id']),
   T('delete_event', 'Delete an event by id. For a repeating event, scope "all" deletes the whole series.', {
@@ -104,7 +106,7 @@ const shortId = (e) => (e.id.includes('@') ? `${e.id.slice(0, 8)}@${e.id.split('
 
 function line(e) {
   const t = e.type ? ` [${e.type}]` : '';
-  const rep = e.recurring ? ' (repeats)' : '';
+  const rep = `${e.recurring ? ' (repeats)' : ''}${e.description ? ` | notes: ${e.description.replace(/\s+/g, ' ').slice(0, 120)}${e.description.length > 120 ? '...' : ''}` : ''}`;
   if (e.allDay) return `${shortId(e)} | ${e.start} all day | ${e.title}${t}${rep}`;
   const s = new Date(e.start);
   const en = new Date(e.end);
@@ -161,11 +163,11 @@ function runTool(name, input) {
       if (input.all_day) {
         const day = input.start.slice(0, 10);
         const next = new Date(`${day}T00:00`); next.setDate(next.getDate() + 1);
-        ev = events.create({ title: input.title, allDay: true, start: day, end: fmtDate(next), type: input.type });
+        ev = events.create({ title: input.title, allDay: true, start: day, end: fmtDate(next), type: input.type, description: input.notes });
       } else {
         if (!input.end) throw new Error('end is required for timed events');
         const s = parseTime(input.start); const e = parseTime(input.end);
-        ev = events.create({ title: input.title, start: s.toISOString(), end: e.toISOString(), type: input.type, recurrence: input.recurrence });
+        ev = events.create({ title: input.title, start: s.toISOString(), end: e.toISOString(), type: input.type, recurrence: input.recurrence, description: input.notes });
         const clash = overlaps(s, e, ev.id);
         const rule = ev.recurrenceText ? `\nRepeats: ${ev.recurrenceText}` : '';
         return `Created: ${line(ev)}${rule}${clash.length ? `\nWarning, first occurrence overlaps:\n${clash.map(line).join('\n')}` : ''}`;
@@ -179,6 +181,7 @@ function runTool(name, input) {
       if (input.start) patch.start = parseTime(input.start).toISOString();
       if (input.end) patch.end = parseTime(input.end).toISOString();
       if (input.type) patch.type = input.type === 'none' ? null : input.type;
+      if (input.notes !== undefined) patch.description = input.notes;
       const ev = events.update(resolveId(input.id), patch, input.scope === 'all' ? 'all' : 'this');
       return `Updated: ${line(ev)}`;
     }

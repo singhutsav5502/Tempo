@@ -82,27 +82,11 @@ textarea.live { color: var(--muted); font-style: italic; }
 body.tab-today #msgs, body.tab-today #composer, body.tab-today #voice-status, body.tab-today #banner, body.tab-today #new-chat { display: none !important; }
 #today { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 12px 14px; display: flex; flex-direction: column; gap: 6px; }
 #today[hidden] { display: none !important; }
-.tsum { display: flex; align-items: baseline; justify-content: space-between; padding: 2px 4px 6px; }
-.tsum b { font-size: 22px; letter-spacing: -0.02em; }
-.tsum span { color: var(--muted); font-size: 12px; }
-.tprog { height: 4px; border-radius: 999px; background: var(--surface-2); margin: 0 4px 8px; overflow: hidden; }
-.tprog i { display: block; height: 100%; background: var(--ok); transition: width 0.3s; }
-.trow { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px; background: var(--surface-2); border-left: 3px solid var(--c); }
-.trow.done { background: color-mix(in srgb, var(--ok) 12%, var(--surface-2)); }
-.trow.missed { background: color-mix(in srgb, var(--danger) 10%, var(--surface-2)); }
-.trow.rest { opacity: 0.55; }
-.tname { flex: 1; min-width: 0; }
-.tname b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tname small { color: var(--muted); font-size: 11px; }
-.tnum { display: flex; align-items: center; gap: 2px; }
-.tnum input { width: 58px; text-align: center; padding: 5px 4px; font-weight: 600; }
-input[type='number']::-webkit-inner-spin-button { display: none; }
-.tnum .step { width: 22px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
-.tnum .step:hover { background: var(--surface); color: var(--text); }
-.tbtn { width: 30px; height: 30px; border-radius: 9px; border: 1.5px solid var(--border-strong); background: transparent; color: var(--muted); font-size: 14px; padding: 0; }
-.tbtn.tick:hover { border-color: var(--ok); color: var(--ok); }
-.tbtn.cross:hover { border-color: var(--danger); color: var(--danger); }
-.tbtn.tick.on { background: var(--ok); border-color: var(--ok); color: #0e0f13; }
-.tbtn.cross.on { background: var(--danger); border-color: var(--danger); color: #fff; }
-.tbtn.auto { opacity: 0.65; }
-.tempty { color: var(--muted); padding: 18px 6px; text-align: center; }
+
+/* ---- goals chip on the pill ---- */
+.goals-chip { flex: none; display: flex; align-items: center; gap: 5px; border: 1px solid var(--border-strong); background: transparent; color: var(--muted); border-radius: 999px; padding: 4px 10px 4px 8px; font-size: 12px; font-weight: 600; }
+.goals-chip:hover { background: var(--surface-2); color: var(--text); }
+.goals-chip svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.goals-chip.some { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.goals-chip.all { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.goals-chip.none { display: none; }
