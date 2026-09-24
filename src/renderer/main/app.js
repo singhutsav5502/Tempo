@@ -133,10 +133,10 @@ function eventEl({ e, s, t, lane, lanes, day }) {
   const short = height < 38;
   const start = new Date(e.start); const end = new Date(e.end);
   const el = h('div', {
-    class: `ev${blocksSomething(e) ? ' blocks' : ''}${short ? ' short' : ''}${e.pending ? ' pending' : ''}`,
+    class: `ev${blocksSomething(e) ? ' blocks' : ''}${short ? ' short' : ''}${e.pending ? ' pending' : ''}${e.recurring ? ' recurring' : ''}`,
     style: `--c:${colorOf(e)};top:${top}px;height:${height}px;left:calc(${lane / lanes * 100}% + 2px);width:calc(${100 / lanes}% - 6px)`,
     'data-id': e.id,
-  }, h('div', { class: 't' }, e.title), h('div', { class: 's' }, `${fmtTime(start)} – ${fmtTime(end)}`));
+  }, h('div', { class: 't' }, e.title), h('div', { class: 's' }, `${e.recurring ? '↻ ' : ''}${fmtTime(start)} – ${fmtTime(end)}`));
   // Only same-day events can be dragged; multi-day ones open the editor.
   if (ymd(start) === ymd(new Date(end - 1))) el.append(h('div', { class: 'rz' }));
   return el;
@@ -281,6 +281,25 @@ function openModal(node) {
 }
 const closeModal = () => $('#modal-root').replaceChildren();
 
+const WEEKDAY_CODES = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+// Asks whether a change to a repeating event applies to one occurrence or the whole series. Resolves 'this' | 'all' | null.
+function askScope(verb) {
+  return new Promise((resolve) => {
+    // Layered on top of the editor so cancelling leaves whatever was typed intact.
+    const scrim = h('div', { class: 'scrim', style: 'z-index:30' });
+    const done = (v) => { scrim.remove(); resolve(v); };
+    scrim.append(h('div', { class: 'modal', style: 'width:340px', onkeydown: (e) => { if (e.key === 'Escape') done(null); } },
+      h('div', { style: 'font-weight:600;font-size:15px' }, `${verb} repeating event`),
+      h('div', { class: 'hint', style: 'margin:0' }, 'Should this apply to just this event, or every event in the series?'),
+      h('div', { class: 'actions', style: 'flex-wrap:wrap' },
+        h('button', { class: 'btn', onclick: () => done(null) }, 'Cancel'),
+        h('button', { class: 'btn', onclick: () => done('this') }, 'This event'),
+        h('button', { class: 'btn primary', onclick: () => done('all') }, 'All events'))));
+    $('#modal-root').append(scrim);
+  });
+}
+
 function openEditor(existing, draft) {
   const start = existing ? new Date(existing.start) : draft.start;
   const end = existing ? new Date(existing.end) : draft.end;
@@ -294,6 +313,16 @@ function openEditor(existing, draft) {
   const hint = h('div', { class: 'hint' });
   const chips = h('div', { class: 'types' });
 
+  // Repeat controls (new events only; existing series are edited via the scope prompt)
+  const repeat = h('select', {},
+    [['', 'Does not repeat'], ['daily', 'Every day'], ['weekdays', 'Every weekday'], ['weekly', 'Every week'], ['monthly', 'Every month'], ['yearly', 'Every year']]
+      .map(([v, l]) => h('option', { value: v }, l)));
+  const until = h('input', { type: 'date', title: 'Repeat until (optional)' });
+  const untilNote = h('div', { class: 'hint' }, 'Repeats forever unless you pick an end date on the right.');
+  const repeatRow = h('div', {}, h('div', { class: 'row' }, repeat, until), untilNote);
+  until.hidden = true; untilNote.hidden = true;
+  repeat.onchange = () => { until.hidden = untilNote.hidden = !repeat.value; };
+
   const drawChips = () => {
     chips.replaceChildren(
       ...[{ id: null, name: 'None', color: null }, ...state.settings.types].map((t) => h('button', {
@@ -306,21 +335,49 @@ function openEditor(existing, draft) {
   };
   drawChips();
 
+  const recurrenceFromForm = (day) => {
+    if (!repeat.value) return undefined;
+    const rec = repeat.value === 'weekdays' ? { freq: 'weekly', days: ['MO', 'TU', 'WE', 'TH', 'FR'] }
+      : repeat.value === 'weekly' ? { freq: 'weekly', days: [WEEKDAY_CODES[day.getDay()]] }
+      : { freq: repeat.value };
+    if (until.value) rec.until = until.value;
+    return rec;
+  };
+
   const save = async () => {
     const s = parseLocal(date.value, from.value); const e = parseLocal(date.value, to.value);
     try {
       const payload = { title: title.value, type, start: s.toISOString(), end: e.toISOString() };
-      if (existing) await tempo.events.update(existing.id, payload); else await tempo.events.create(payload);
+      if (existing) {
+        let scope = 'this';
+        if (existing.recurring) {
+          // Moving to another day can only ever apply to one occurrence, so don't ask.
+          if (date.value === ymd(start)) { scope = await askScope('Update'); if (!scope) return; }
+        }
+        await tempo.events.update(existing.id, payload, scope);
+      } else {
+        await tempo.events.create({ ...payload, recurrence: recurrenceFromForm(s) });
+      }
       closeModal(); loadEvents();
     } catch (err) { toast(err.message); }
+  };
+
+  const remove = async () => {
+    let scope = 'this';
+    if (existing.recurring) { scope = await askScope('Delete'); if (!scope) return; }
+    await tempo.events.remove(existing.id, scope);
+    closeModal(); loadEvents();
   };
 
   const modal = h('div', { class: 'modal', onkeydown: (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') save(); if (e.key === 'Escape') closeModal(); } },
     title,
     h('div', { class: 'row' }, date, from, to),
+    existing
+      ? existing.recurring && h('div', { class: 'hint', style: 'margin:0' }, `↻ ${existing.recurrenceText || 'Repeating event'}`)
+      : h('div', {}, h('div', { class: 'lbl' }, 'Repeat'), repeatRow),
     h('div', {}, h('div', { class: 'lbl' }, 'Block type'), chips, hint),
     h('div', { class: 'actions' },
-      existing && h('button', { class: 'btn danger left', onclick: async () => { await tempo.events.remove(existing.id); closeModal(); loadEvents(); } }, 'Delete'),
+      existing && h('button', { class: 'btn danger left', onclick: remove }, 'Delete'),
       h('button', { class: 'btn', onclick: closeModal }, 'Cancel'),
       h('button', { class: 'btn primary', onclick: save }, 'Save')));
   openModal(modal);

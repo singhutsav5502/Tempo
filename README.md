@@ -18,6 +18,13 @@ Hotkeys (changeable in Settings): **Ctrl+Alt+T** opens the chat and starts **lis
 3. **Website blocking**: click *Enable website blocking* once. It shows a single UAC prompt that lets your user edit
    the hosts file; Tempo itself never runs elevated.
 
+## Repeating events
+
+Pick **Repeat** when creating an event (every day / weekday / week / month / year, optional end date), or just say
+"gym every Monday, Wednesday and Friday at 6pm". Editing or deleting one occurrence asks whether it applies to
+**this event** or **all events**; "all" can change title, block type and time of day (not the day). Series sync to
+Google Calendar as real recurring events, and repeating events created in Google show up with a ↻ marker.
+
 ## Voice
 
 Press **Ctrl+Alt+T** (or the mic button) and just talk: your words appear in the chat box live as you speak, and are

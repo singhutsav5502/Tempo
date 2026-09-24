@@ -8,6 +8,7 @@ How to work:
 - Each user message begins with a bracketed line giving the current local date, time and timezone. Resolve relative dates ("tomorrow", "Thursday") from it, and pass local times to tools as YYYY-MM-DDTHH:mm.
 - Default durations when none is given: focus/deep work 90 minutes, meetings and calls 30 minutes, everything else 60 minutes.
 - Deep work, studying, coding and writing sessions should use the "focus" block type so distractions get blocked. Call list_block_types if you are unsure which ids exist.
+- Repeating events: pass the recurrence field of create_event ("every weekday" = weekly with days MO,TU,WE,TH,FR). update_event and delete_event affect only the one occurrence you name unless you pass scope "all"; use "all" when the user means the whole series ("cancel my weekly standup").
 - Before scheduling, check for conflicts (list_events or find_free_time). If something overlaps, say so plainly and suggest an alternative rather than silently double-booking.
 - Your replies appear in a narrow chat panel: keep them to one to three short sentences, plain text, no tables or headings. Confirm what you did with the concrete day and time.`;
 
@@ -28,11 +29,26 @@ const TOOLS = [
     end: { type: 'string', description: 'Local time YYYY-MM-DDTHH:mm. Ignored for all_day.' },
     type: { type: 'string', description: 'Block type id, e.g. focus. Omit for a plain event.' },
     all_day: { type: 'boolean' },
+    recurrence: {
+      type: 'object',
+      description: 'Make it repeat. Not for all-day events.',
+      properties: {
+        freq: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'] },
+        interval: { type: 'integer', description: 'Every N days/weeks/...; default 1' },
+        days: { type: 'array', items: { type: 'string', enum: ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'] }, description: 'Weekly only; defaults to the start day' },
+        count: { type: 'integer', description: 'Stop after this many occurrences' },
+        until: { type: 'string', description: 'Last date, YYYY-MM-DD' },
+      },
+      required: ['freq'],
+    },
   }, ['title', 'start']),
   T('update_event', 'Change an existing event. Only pass the fields you want to change. type "none" clears the block type.', {
     id: { type: 'string' }, title: { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, type: { type: 'string' },
+    scope: { type: 'string', enum: ['this', 'all'], description: 'For repeating events: this occurrence only (default) or the whole series. "all" can change title, type and time of day, not the day.' },
   }, ['id']),
-  T('delete_event', 'Delete an event by id.', { id: { type: 'string' } }, ['id']),
+  T('delete_event', 'Delete an event by id. For a repeating event, scope "all" deletes the whole series.', {
+    id: { type: 'string' }, scope: { type: 'string', enum: ['this', 'all'] },
+  }, ['id']),
   T('find_free_time', 'Find free gaps between existing timed events over a date range (max 7 days).', {
     from_date: { type: 'string', description: 'YYYY-MM-DD' },
     to_date: { type: 'string', description: 'YYYY-MM-DD, inclusive. Defaults to from_date.' },
@@ -61,16 +77,22 @@ function parseTime(s) {
   return d;
 }
 
+// Occurrences of one virtual series share a uuid, so their short id keeps the date: "a1b2c3d4@2026-09-28".
+const shortId = (e) => (e.id.includes('@') ? `${e.id.slice(0, 8)}@${e.id.split('@')[1]}` : e.id.slice(0, 8));
+
 function line(e) {
   const t = e.type ? ` [${e.type}]` : '';
-  if (e.allDay) return `${e.id.slice(0, 8)} | ${e.start} all day | ${e.title}${t}`;
+  const rep = e.recurring ? ' (repeats)' : '';
+  if (e.allDay) return `${shortId(e)} | ${e.start} all day | ${e.title}${t}${rep}`;
   const s = new Date(e.start);
   const en = new Date(e.end);
-  return `${e.id.slice(0, 8)} | ${fmtDay(s)} ${fmtDate(s)} ${fmtTime(s)}-${fmtTime(en)} | ${e.title}${t}`;
+  return `${shortId(e)} | ${fmtDay(s)} ${fmtDate(s)} ${fmtTime(s)}-${fmtTime(en)} | ${e.title}${t}${rep}`;
 }
 
 function resolveId(prefix) {
-  const matches = events.list().filter((e) => e.id.startsWith(prefix));
+  const all = events.list();
+  const exact = all.filter((e) => shortId(e) === prefix || e.id === prefix);
+  const matches = exact.length ? exact : all.filter((e) => e.id.startsWith(prefix));
   if (matches.length !== 1) throw new Error(matches.length ? `Id "${prefix}" is ambiguous` : `No event with id "${prefix}"`);
   return matches[0].id;
 }
@@ -121,9 +143,10 @@ function runTool(name, input) {
       } else {
         if (!input.end) throw new Error('end is required for timed events');
         const s = parseTime(input.start); const e = parseTime(input.end);
-        ev = events.create({ title: input.title, start: s.toISOString(), end: e.toISOString(), type: input.type });
+        ev = events.create({ title: input.title, start: s.toISOString(), end: e.toISOString(), type: input.type, recurrence: input.recurrence });
         const clash = overlaps(s, e, ev.id);
-        return `Created: ${line(ev)}${clash.length ? `\nWarning, overlaps:\n${clash.map(line).join('\n')}` : ''}`;
+        const rule = ev.recurrenceText ? `\nRepeats: ${ev.recurrenceText}` : '';
+        return `Created: ${line(ev)}${rule}${clash.length ? `\nWarning, first occurrence overlaps:\n${clash.map(line).join('\n')}` : ''}`;
       }
       return `Created: ${line(ev)}`;
     }
@@ -134,14 +157,15 @@ function runTool(name, input) {
       if (input.start) patch.start = parseTime(input.start).toISOString();
       if (input.end) patch.end = parseTime(input.end).toISOString();
       if (input.type) patch.type = input.type === 'none' ? null : input.type;
-      const ev = events.update(resolveId(input.id), patch);
+      const ev = events.update(resolveId(input.id), patch, input.scope === 'all' ? 'all' : 'this');
       return `Updated: ${line(ev)}`;
     }
     case 'delete_event': {
       const id = resolveId(input.id);
       const label = line(events.byId(id));
-      events.remove(id);
-      return `Deleted: ${label}`;
+      const all = input.scope === 'all';
+      events.remove(id, all ? 'all' : 'this');
+      return `Deleted${all ? ' the whole series' : ''}: ${label}`;
     }
     case 'find_free_time': {
       const slots = freeSlots(input);

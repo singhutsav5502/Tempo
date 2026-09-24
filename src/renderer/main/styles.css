@@ -76,11 +76,12 @@
 /* ---- modal ---- */
 #modal-root:empty { display: none; }
 .scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; z-index: 20; }
-.modal { width: 380px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px; }
+.modal { width: 440px; max-width: calc(100vw - 32px); background: var(--surface); border: 1px solid var(--border-strong); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 14px; }
 .modal input.title { font-size: 17px; font-weight: 600; background: transparent; border: 0; border-bottom: 1px solid var(--border-strong); border-radius: 0; padding: 4px 0 8px; }
 .modal input.title:focus { border-color: var(--accent); }
 .row { display: flex; gap: 8px; align-items: center; }
-.row > * { flex: 1; }
+.row > * { flex: 1; min-width: 0; }
+.row input[type='date'], .row input[type='time'] { padding-left: 8px; padding-right: 6px; }
 .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); margin-bottom: 6px; }
 .types { display: flex; flex-wrap: wrap; gap: 6px; }
 .type-chip { border: 1px solid var(--border-strong); background: transparent; border-radius: 999px; padding: 4px 11px; display: inline-flex; align-items: center; gap: 6px; }

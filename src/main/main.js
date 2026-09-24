@@ -206,8 +206,8 @@ function publicSettings() {
 function registerIpc() {
   ipcMain.handle('events:range', (_e, a, b) => events.range(a, b));
   ipcMain.handle('events:create', (_e, ev) => events.create(ev));
-  ipcMain.handle('events:update', (_e, id, patch) => events.update(id, patch));
-  ipcMain.handle('events:remove', (_e, id) => events.remove(id));
+  ipcMain.handle('events:update', (_e, id, patch, scope) => events.update(id, patch, scope));
+  ipcMain.handle('events:remove', (_e, id, scope) => events.remove(id, scope));
   ipcMain.handle('events:next', () => ({ active: events.activeAt(), next: events.nextAfter() }));
 
   ipcMain.handle('settings:get', publicSettings);

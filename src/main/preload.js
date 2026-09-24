@@ -10,8 +10,8 @@ contextBridge.exposeInMainWorld('tempo', {
   events: {
     range: (a, b) => ipcRenderer.invoke('events:range', a, b),
     create: (ev) => ipcRenderer.invoke('events:create', ev),
-    update: (id, patch) => ipcRenderer.invoke('events:update', id, patch),
-    remove: (id) => ipcRenderer.invoke('events:remove', id),
+    update: (id, patch, scope) => ipcRenderer.invoke('events:update', id, patch, scope),
+    remove: (id, scope) => ipcRenderer.invoke('events:remove', id, scope),
     now: () => ipcRenderer.invoke('events:next'),
     onChanged: on('events:changed'),
   },

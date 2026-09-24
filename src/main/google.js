@@ -145,6 +145,8 @@ function fromGoogle(g, existing) {
     id: existing?.id || crypto.randomUUID(),
     gid: g.id,
     etag: g.etag,
+    recurring: !!g.recurringEventId,
+    seriesGid: g.recurringEventId || undefined,
     title: g.summary || '(No title)',
     description: g.description || '',
     allDay,
@@ -154,7 +156,63 @@ function fromGoogle(g, existing) {
   };
 }
 
+const localTz = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+// Skipped days are stored as dates; Google wants the excluded occurrence's full start (that day at the series' time).
+function exdate(sr, day, tz) {
+  const t = new Date(sr.start);
+  const hms = `${String(t.getHours()).padStart(2, '0')}${String(t.getMinutes()).padStart(2, '0')}${String(t.getSeconds()).padStart(2, '0')}`;
+  return `EXDATE;TZID=${tz}:${day.replace(/-/g, '')}T${hms}`;
+}
+
+function seriesToGoogle(sr) {
+  const tz = localTz();
+  return {
+    summary: sr.title,
+    description: sr.description || undefined,
+    start: { dateTime: sr.start, timeZone: tz },
+    end: { dateTime: sr.end, timeZone: tz },
+    recurrence: [events.rruleString(sr.rule), ...(sr.exdates || []).map((day) => exdate(sr, day, tz))],
+    extendedProperties: { private: { tempoType: sr.type || '' } },
+  };
+}
+
+// Whole-series edits/deletes queued while offline, applied to the recurring master event.
+async function pushOps() {
+  const ops = events.opsList();
+  while (ops.length) {
+    const op = ops[0];
+    if (op.type === 'series-delete') {
+      await api(`/events/${op.gid}`, { method: 'DELETE' });
+    } else if (op.type === 'series-update') {
+      const m = await api(`/events/${op.gid}`);
+      if (!m.gone) {
+        const body = { summary: op.patch.title, extendedProperties: { private: { ...(m.extendedProperties?.private || {}), tempoType: op.patch.type || '' } } };
+        if (op.patch.dStart || op.patch.dEnd) {
+          body.start = { dateTime: new Date(Date.parse(m.start.dateTime) + op.patch.dStart).toISOString(), timeZone: m.start.timeZone || localTz() };
+          body.end = { dateTime: new Date(Date.parse(m.end.dateTime) + op.patch.dEnd).toISOString(), timeZone: m.end.timeZone || localTz() };
+        }
+        await api(`/events/${op.gid}`, { method: 'PATCH', body });
+      }
+    }
+    ops.shift();
+  }
+}
+
+async function pushSeries() {
+  const list = events.seriesList();
+  for (const sr of [...list]) {
+    if (sr.pending === 'create' && !sr.gid) {
+      const g = await api('/events', { method: 'POST', body: seriesToGoogle(sr) });
+      sr.gid = g.id;
+      delete sr.pending;
+    }
+  }
+}
+
 async function push() {
+  await pushOps();
+  await pushSeries();
   const all = store.get().events;
   for (const e of [...all]) {
     if (!e.pending) continue;
@@ -196,6 +254,8 @@ async function pull() {
     const next = fromGoogle(g, cur);
     if (cur) Object.assign(cur, next); else all.push(next);
   }
+  // Series that Google now owns come back as expanded instances above; the local definition is no longer needed.
+  events.seriesList().splice(0, Infinity, ...events.seriesList().filter((sr) => !sr.gid));
   // Synced events inside the window that no longer exist upstream were deleted in Google.
   store.get().events = all.filter((e) => {
     if (!e.gid || e.pending || seen.has(e.gid)) return true;
