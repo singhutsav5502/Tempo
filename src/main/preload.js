@@ -42,6 +42,12 @@ contextBridge.exposeInMainWorld('tempo', {
     onOpen: on('widget:open'),
     openMain: () => ipcRenderer.send('app:open-main'),
   },
+  stt: {
+    warm: () => ipcRenderer.send('stt:warm'),
+    transcribe: (audio) => ipcRenderer.invoke('stt:transcribe', audio),
+    onStatus: on('stt:status'),
+  },
+  voice: { onHotkey: on('voice:hotkey') },
   alert: {
     onShow: on('alert:show'),
     act: (id, action) => ipcRenderer.send('alert:action', id, action),

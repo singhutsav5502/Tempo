@@ -10,6 +10,7 @@
   "private": true,
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
+    "@huggingface/transformers": "^4.3.0",
     "electron": "^44.4.5"
   }
 }

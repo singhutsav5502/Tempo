@@ -24,6 +24,7 @@ const dur = (m) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : 
 async function refreshPill() {
   const cfg = await tempo.settings.get();
   types = cfg.types;
+  autoSend = cfg.voiceAutoSend !== false;
   $('#chat-btn').title = `Ask Tempo${cfg.hotkeyChat ? ` (${cfg.hotkeyChat.replace('Control', 'Ctrl')})` : ''}`;
   const { active, next } = await tempo.events.now();
   const now = Date.now();
@@ -140,6 +141,135 @@ function autosize() {
   t.style.height = `${Math.min(t.scrollHeight, 110)}px`;
 }
 
+// ---- voice --------------------------------------------------------------------
+
+let voice = null;            // active VoiceCapture
+let voiceState = 'idle';     // idle | listening | transcribing
+let autoSend = true;
+let statusTimer = null;
+let modelStatus = null;      // { phase, percent } while Whisper is loading/downloading
+
+function setVoiceState(state, message) {
+  voiceState = state;
+  document.body.classList.toggle('listening', state === 'listening');
+  document.body.classList.toggle('transcribing', state === 'transcribing');
+  showVoiceStatus(message);
+}
+
+function showVoiceStatus(message, ttl) {
+  const box = $('#voice-status');
+  clearTimeout(statusTimer);
+  let text = message;
+  if (modelStatus && modelStatus.phase === 'loading' && voiceState !== 'idle') text = `Getting speech ready… ${modelStatus.percent}%`;
+  box.textContent = text || '';
+  box.hidden = !text;
+  if (ttl) statusTimer = setTimeout(() => { box.hidden = true; }, ttl);
+}
+
+function micErrorText(err) {
+  if (err && err.name === 'NotFoundError') return 'No microphone found.';
+  if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) return 'Microphone access is blocked. Turn it on in Windows Settings → Privacy → Microphone.';
+  return `Couldn't use the microphone: ${err?.message || err}`;
+}
+
+const cleanTranscript = (t) => t.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim(); // drops [BLANK_AUDIO], (silence)...
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function showLive(base, text) {
+  const input = $('#input');
+  input.value = base ? `${base} ${text}` : text;
+  autosize();
+  input.scrollTop = input.scrollHeight;
+}
+
+// Whisper isn't a streaming model, so "live" means: while you talk, keep re-transcribing what has been said so far
+// (one pass at a time, always on the latest audio) and show the newest result. The final pass polishes it.
+function startLive(cap, base) {
+  const st = { seq: 0, covered: 0, text: '', stopped: false, inflight: null };
+  st.done = (async () => {
+    while (!st.stopped) {
+      const snap = cap.snapshot();
+      if (!snap || snap.voicedSamples < 8000 || snap.voicedSamples - st.covered < 6400) { await sleep(120); continue; }
+      const seq = ++st.seq;
+      st.inflight = tempo.stt.transcribe(snap.audio).then((t) => ({ t, seq, covered: snap.voicedSamples }), () => null);
+      const r = await st.inflight;
+      st.inflight = null;
+      if (!r || r.seq !== st.seq) continue;
+      st.covered = r.covered;                       // advance even on empty results so noise doesn't spin the loop
+      const text = cleanTranscript(r.t);
+      if (text) { st.text = text; if (!st.stopped) showLive(base, text); }
+    }
+  })();
+  return st;
+}
+
+async function startListening() {
+  if (voiceState !== 'idle') return;
+  const input = $('#input');
+  const base = input.value.trim();
+  setVoiceState('listening', 'Listening… say what to schedule');
+  input.readOnly = true;
+  input.classList.add('live');
+  tempo.stt.warm();
+
+  voice = new VoiceCapture((lvl) => document.documentElement.style.setProperty('--lvl', lvl.toFixed(2)));
+  const live = startLive(voice, base);
+  let result;
+  try {
+    result = await voice.start();
+  } catch (err) {
+    live.stopped = true;
+    voice = null;
+    endVoice(input);
+    msgs.append(el('div', 'msg err', micErrorText(err)));
+    scrollDown();
+    return;
+  }
+  voice = null;
+  live.stopped = true;
+  await live.done; // lets an in-flight partial land so it can double as the final result
+
+  if (!result.audio) {
+    input.value = base; autosize();
+    endVoice(input);
+    if (result.reason !== 'cancel') showVoiceStatus("Didn't catch anything.", 3000);
+    return;
+  }
+
+  setVoiceState('transcribing', 'Finishing…');
+  let text = live.text;
+  // Reuse the last partial when it already covered (nearly) everything that was said; otherwise one final pass.
+  if (!text || result.voicedSamples - live.covered > 4000) {
+    try {
+      text = cleanTranscript(await tempo.stt.transcribe(result.audio));
+    } catch (err) {
+      input.value = base; autosize();
+      endVoice(input);
+      msgs.append(el('div', 'msg err', err.message));
+      scrollDown();
+      return;
+    }
+  }
+  endVoice(input);
+  if (text.length < 2) { input.value = base; autosize(); showVoiceStatus("Didn't catch that.", 3000); return; }
+  showLive(base, text);
+  if (autoSend && !busy) send(`${base} ${text}`.trim());
+  else input.focus();
+}
+
+function endVoice(input) {
+  setVoiceState('idle');
+  input.readOnly = false;
+  input.classList.remove('live');
+}
+
+// Hotkey / mic button: start listening, or, if already listening, stop and use what was heard.
+function toggleListening() {
+  if (voiceState === 'listening' && voice) voice.finish();
+  else startListening();
+}
+
 // ---- wiring ---------------------------------------------------------------------
 
 let open = false;
@@ -150,7 +280,8 @@ function setOpen(v) {
 }
 
 $('#chat-btn').onclick = () => tempo.widget.setOpen(!open);
-$('#collapse').onclick = () => tempo.widget.setOpen(false);
+$('#collapse').onclick = () => { voice?.cancel(); tempo.widget.setOpen(false); };
+$('#mic').onclick = toggleListening;
 $('#open-main').onclick = () => tempo.widget.openMain();
 $('#new-chat').onclick = async () => { await tempo.chat.reset(); bot = null; showEmpty(); };
 $('#composer').onsubmit = (e) => { e.preventDefault(); send($('#input').value); };
@@ -158,9 +289,15 @@ $('#input').addEventListener('input', autosize);
 $('#input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send($('#input').value); }
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && open) tempo.widget.setOpen(false); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (voiceState === 'listening' && voice) voice.cancel(); // first Esc cancels the mic, second closes the panel
+  else if (open) tempo.widget.setOpen(false);
+});
 
 tempo.widget.onOpen(setOpen);
+tempo.voice.onHotkey(toggleListening);
+tempo.stt.onStatus((st) => { modelStatus = st.phase === 'ready' ? null : st; if (voiceState !== 'idle') showVoiceStatus(voiceState === 'listening' ? 'Listening… say what to schedule' : 'Transcribing…'); });
 tempo.events.onChanged(refreshPill);
 tempo.blocker.onState((b) => { blocker = b; renderBanner(); refreshPill(); });
 

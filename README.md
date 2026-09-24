@@ -6,7 +6,7 @@ synced with Google Calendar, and **blocks** that close distracting apps and webs
     npm install
     npm start          # first run: node node_modules/electron/install.js if Electron's binary is missing
 
-Hotkeys (changeable in Settings): **Ctrl+Alt+T** opens the chat, **Ctrl+Alt+C** opens the calendar; press again to put it away. The tray icon also toggles the chat. Drag the pill to move it.
+Hotkeys (changeable in Settings): **Ctrl+Alt+T** opens the chat and starts **listening**, **Ctrl+Alt+C** toggles the calendar. The tray icon toggles the chat. Drag the pill to move it.
 
 ## Setup (Settings, gear icon top-right)
 
@@ -17,6 +17,13 @@ Hotkeys (changeable in Settings): **Ctrl+Alt+T** opens the chat, **Ctrl+Alt+C** 
    client ID + secret, click *Connect Google*.
 3. **Website blocking**: click *Enable website blocking* once. It shows a single UAC prompt that lets your user edit
    the hosts file; Tempo itself never runs elevated.
+
+## Voice
+
+Press **Ctrl+Alt+T** (or the mic button) and just talk: your words appear in the chat box live as you speak, and are
+sent when you stop (or press the hotkey again to send immediately; Esc cancels). Speech is recognised **locally** with
+Whisper (`whisper-base.en`), so audio never leaves your PC. The model (~80 MB) downloads once on first use.
+Turn auto-send off in Settings to review the text before sending.
 
 ## How blocking works
 

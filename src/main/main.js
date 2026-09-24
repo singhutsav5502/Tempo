@@ -1,10 +1,11 @@
-const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, globalShortcut, ipcMain, screen, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, nativeTheme, globalShortcut, ipcMain, screen, shell, session } = require('electron');
 const path = require('path');
 const store = require('./store');
 const events = require('./events');
 const google = require('./google');
 const blocker = require('./blocker');
 const ai = require('./ai');
+const stt = require('./stt');
 
 const R = (...p) => path.join(__dirname, '..', 'renderer', ...p);
 const PRELOAD = path.join(__dirname, 'preload.js');
@@ -162,9 +163,10 @@ function openChat() {
   setWidgetOpen(true);
 }
 
-// Pressing a hotkey again while its window is up and focused puts it away.
+// Opens the chat and starts listening; pressing it again while listening stops and sends what was said.
 function onChatKey() {
-  if (widgetOpen && widgetWin?.isFocused()) setWidgetOpen(false); else openChat();
+  openChat();
+  send(widgetWin, 'voice:hotkey');
 }
 
 function onCalendarKey() {
@@ -240,6 +242,10 @@ function registerIpc() {
   });
   ipcMain.handle('chat:reset', () => ai.reset());
 
+  ipcMain.on('stt:warm', () => stt.warm());
+  ipcMain.handle('stt:transcribe', (_e, audio) => stt.transcribe(audio));
+  stt.setStatusHandler((st) => send(widgetWin, 'stt:status', st));
+
   ipcMain.on('widget:set-open', (_e, open) => setWidgetOpen(open));
   ipcMain.on('app:open-main', () => showMain());
 }
@@ -249,6 +255,13 @@ nativeTheme.on('updated', () => { if (mainWin) mainWin.setTitleBarOverlay(overla
 
 // ---- lifecycle ------------------------------------------------------------
 
+// Only the widget may use the microphone (for voice commands).
+function allowMicForWidget() {
+  const isWidget = (wc) => !!wc && !!widgetWin && wc === widgetWin.webContents;
+  session.defaultSession.setPermissionRequestHandler((wc, permission, cb) => cb(permission === 'media' && isWidget(wc)));
+  session.defaultSession.setPermissionCheckHandler((wc, permission) => permission === 'media' && isWidget(wc));
+}
+
 app.whenReady().then(() => {
   store.init();
   registerIpc();
@@ -256,6 +269,7 @@ app.whenReady().then(() => {
   blocker.start();
   createMain();
   createWidget();
+  allowMicForWidget();
   createTray();
   hotkeyErrors = registerHotkeys();
   if (hotkeyErrors.length) {
@@ -264,4 +278,4 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', (e) => e.preventDefault()); // keep running in the tray
-app.on('will-quit', () => { globalShortcut.unregisterAll(); blocker.stop(); ai.stop(); store.flush(); });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); blocker.stop(); ai.stop(); stt.stop(); store.flush(); });

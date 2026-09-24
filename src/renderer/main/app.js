@@ -443,9 +443,10 @@ function drawSettings() {
 
     h('section', {}, h('h3', {}, 'General'),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.launchAtStartup, onchange: (e) => saveSettings({ launchAtStartup: e.target.checked }) }), 'Launch Tempo when I sign in to Windows'),
+      h('label', { class: 'check', style: 'margin-top:10px' }, h('input', { type: 'checkbox', checked: s.voiceAutoSend, onchange: (e) => saveSettings({ voiceAutoSend: e.target.checked }) }), 'Send voice commands automatically when I stop talking'),
       h('div', { class: 'grid2', style: 'grid-template-columns:1fr 1fr;margin-top:14px' },
         hotkeyField('Ask Tempo (chat) hotkey', 'hotkeyChat'), hotkeyField('Open calendar hotkey', 'hotkeyCalendar')),
-      h('div', { class: 'hint', style: 'margin-top:-6px' }, 'Work from anywhere. Press again to put the window away. Backspace clears one.')));
+      h('div', { class: 'hint', style: 'margin-top:-6px' }, 'Chat hotkey opens the chat and listens; press it again to send. Calendar hotkey toggles the calendar. Backspace clears one.')));
   d.scrollTop = scroll;
 }
 
