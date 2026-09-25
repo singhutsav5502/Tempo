@@ -76,18 +76,23 @@ function createMain() {
     titleBarStyle: 'hidden', titleBarOverlay: overlay(),
     webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true },
   });
-  if (bounds.maximized) mainWin.maximize();
+  // maximize() also shows the window, so a quiet start at sign-in defers it until the calendar is first opened.
+  if (bounds.maximized) { if (startedAtLogin) maximizeOnShow = true; else mainWin.maximize(); }
   rememberMainBounds();
   mainWin.setMenuBarVisibility(false);
   mainWin.loadFile(R('main', 'index.html'));
-  mainWin.once('ready-to-show', () => mainWin.show());
+  mainWin.once('ready-to-show', () => { if (!startedAtLogin) mainWin.show(); });
   mainWin.on('closed', () => { mainWin = null; });
   mainWin.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
 }
 
+let maximizeOnShow = false;
+
 function showMain() {
-  if (!mainWin) createMain();
-  else { if (mainWin.isMinimized()) mainWin.restore(); mainWin.show(); mainWin.focus(); }
+  if (!mainWin) { createMain(); return; }
+  if (mainWin.isMinimized()) mainWin.restore();
+  if (maximizeOnShow) { maximizeOnShow = false; mainWin.maximize(); }
+  mainWin.show(); mainWin.focus();
 }
 
 function widgetBounds(open) {
@@ -315,7 +320,7 @@ function registerIpc() {
     if ('widgetVisible' in patch || 'widgetHideFullscreen' in patch) applyWidgetVisibility();
     if ('provider' in patch || 'ccModel' in patch) ai.reset(); // new backend/model starts a fresh conversation
     if ('hotkeyChat' in patch || 'hotkeyCalendar' in patch) hotkeyErrors = registerHotkeys();
-    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!s.settings.launchAtStartup });
+    if ('launchAtStartup' in patch) syncLoginItem();
     events.changed(false); // re-evaluates blocking and refreshes both windows
     return publicSettings();
   });
@@ -374,6 +379,30 @@ events.bus.on('undoable', (u) => broadcast('events:undoable', u));
 habits.bus.on('changed', () => broadcast('habits:changed'));
 nativeTheme.on('updated', () => { if (mainWin) mainWin.setTitleBarOverlay(overlay()); });
 
+// ---- start with Windows -----------------------------------------------------
+
+const STARTUP_FLAG = '--startup';
+const LOGIN_ITEM_NAME = 'Tempo';
+const startedAtLogin = process.argv.includes(STARTUP_FLAG);
+
+// A packaged build is its own .exe; when run from source (npm start) Windows must start electron.exe with this app's
+// folder. Writes or removes HKCU\...\Run\Tempo to match the setting, and is re-applied on every launch so the
+// registry never drifts from what Settings shows.
+function loginItemOptions() {
+  return app.isPackaged
+    ? { path: process.execPath, args: [STARTUP_FLAG], name: LOGIN_ITEM_NAME }
+    : { path: process.execPath, args: [app.getAppPath(), STARTUP_FLAG], name: LOGIN_ITEM_NAME };
+}
+
+function syncLoginItem() {
+  const want = !!store.get().settings.launchAtStartup;
+  const opts = loginItemOptions();
+  app.setLoginItemSettings({ ...opts, openAtLogin: want });
+  const now = app.getLoginItemSettings(opts).openAtLogin;
+  if (now !== want) console.error(`Tempo: could not ${want ? 'enable' : 'disable'} start with Windows`);
+  return now;
+}
+
 // ---- lifecycle ------------------------------------------------------------
 
 // Only the widget may use the microphone (for voice commands).
@@ -385,6 +414,7 @@ function allowMicForWidget() {
 
 app.whenReady().then(() => {
   store.init();
+  syncLoginItem();
   registerIpc();
   google.start();
   blocker.start();

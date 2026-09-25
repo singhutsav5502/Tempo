@@ -1,6 +1,6 @@
 {
   "name": "tempo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI calendar with focus blocks that enforce themselves",
   "main": "src/main/main.js",
   "scripts": {

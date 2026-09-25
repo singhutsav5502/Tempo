@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.2.0 (2026-09-25)
+
+A usability release: everything from the v0.1.0 UX audit (`docs/UX_AUDIT.md`) except two small items, plus a startup fix.
+
+### Fixed
+- **Start with Windows now works.** The setting was only applied to packaged builds, so running Tempo from source
+  (`npm start`) never registered it. It now registers `electron.exe "<tempo folder>" --startup`, re-applies the setting
+  on every launch, and starts quietly at sign-in (widget and tray only; the calendar opens with the hotkey).
+- Website-blocking permission was reported as enabled when it wasn't (Windows ignores the read-only check), causing
+  repeated EPERM errors; it now checks real write access and shows one plain hint.
+- The "Blocking" indicator was hidden in the default window size; top-bar buttons could fall off-screen on narrow windows.
+
+### Goals
+- Goals panel docked on wide windows and a slim strip (progress ring, tap-to-tick dots) on narrower ones; a Goals
+  button with a live count; "Goals" wording everywhere.
+- Unlogged past days show as missed in the 14-day grid, matching how streaks count them. Removed goals can be restored.
+
+### Getting started
+- Guided first-run setup: assistant (detects Claude Code), goals and targets, Focus apps picked from what's open,
+  website blocking permission, optional Google Calendar with a `client_secret.json` loader. Re-run from Settings.
+- `?` shows every shortcut; `n` creates an event.
+
+### Calendar
+- **Undo** for every change (including the assistant's) via toast, `Ctrl+Z`, or the widget; aware of Google sync.
+- Opens at the next thing today, with "earlier / later" markers; short events keep their titles; labelled editor fields
+  and a plain "what this blocks" line; window size and position remembered.
+
+### Blocking
+- App names instead of process names everywhere; pick apps from what's open or type a program name; websites as chips.
+- The warning names the app and says "save your work"; `A` allows, `C` closes.
+- Confirmation before deleting a block type that upcoming events use.
+
+### Widget
+- Show/hide setting and tray item; optional "hide while a full-screen app is in front" (off by default; ignores
+  maximized windows; works on scaled displays).
+
+### Accessibility
+- WCAG AA text contrast in both themes, 12px minimum, visible focus rings, reduced-motion support.
+- Events, month chips and goal buttons keyboard-operable with spoken labels; dialogs trap and return focus;
+  landmarks, live regions, labelled icon buttons.
+
+### Settings
+- Four tabs (Connections, Blocking, Goals, General) with a "Saved" confirmation.
+
+### Known limitations
+- Still run from source (`npm start`); no installer yet, so notifications may be labelled "Electron".
+- No "sending in..." countdown before voice auto-send; chat history isn't kept across restarts.
+- Already-open browser tabs keep working until reloaded when a site is blocked; DNS-over-HTTPS can bypass the hosts file.
+
 ## v0.1.0 (2026-09-24)
 
 First release of Tempo: an AI calendar for Windows that keeps you on your goals and enforces your focus time.
