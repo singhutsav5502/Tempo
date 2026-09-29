@@ -19,6 +19,23 @@ const PRELOAD = path.join(__dirname, 'preload.js');
 const WIDGET_COLLAPSED = { w: 400, h: 76 };
 const WIDGET_EXPANDED = { w: 400, h: 600 };
 
+// ---- diagnostics log (%APPDATA%	empo	empo.log) --------------------------------
+// Startup, window lifecycle and crashes, so problems after sign-in or a driver reset can be explained later.
+let logFile = null;
+function log(...parts) {
+  try {
+    logFile ||= path.join(app.getPath('userData'), 'tempo.log');
+    if (fs.existsSync(logFile) && fs.statSync(logFile).size > 512 * 1024) fs.renameSync(logFile, `${logFile}.old`);
+    fs.appendFileSync(logFile, `${new Date().toISOString()} ${parts.join(' ')}
+`);
+  } catch { /* never let logging break the app */ }
+}
+
+let quitting = false;
+app.on('before-quit', () => { quitting = true; log('quit requested'); });
+app.on('child-process-gone', (_e, d) => log(`child process gone: type=${d.type} reason=${d.reason} exitCode=${d.exitCode}`));
+process.on('uncaughtException', (err) => log('uncaught exception:', err && err.stack ? err.stack : String(err)));
+
 let mainWin = null;
 let widgetWin = null;
 let alertWin = null;
@@ -83,6 +100,10 @@ function createMain() {
   mainWin.loadFile(R('main', 'index.html'));
   mainWin.once('ready-to-show', () => { if (!startedAtLogin) mainWin.show(); });
   mainWin.on('closed', () => { mainWin = null; });
+  mainWin.webContents.on('render-process-gone', (_e, d) => {
+    log(`calendar page gone: ${d.reason}`);
+    if (!quitting && mainWin && !mainWin.isDestroyed()) mainWin.reload();
+  });
   mainWin.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
 }
 
@@ -95,11 +116,12 @@ function showMain() {
   mainWin.show(); mainWin.focus();
 }
 
-function widgetBounds(open) {
+/** reset: ignore where it was and go back to the primary screen's bottom-right corner. */
+function widgetBounds(open, reset = false) {
   const size = open ? WIDGET_EXPANDED : WIDGET_COLLAPSED;
-  const b = widgetWin ? widgetWin.getBounds() : null;
+  const b = widgetWin && !reset ? widgetWin.getBounds() : null;
   const wa = screen.getPrimaryDisplay().workArea;
-  const saved = store.get().widget;
+  const saved = reset ? { x: null, y: null } : store.get().widget;
   // Anchor the bottom-right corner so the panel grows up and to the left of the pill.
   let right = b ? b.x + b.width : (saved.x != null ? saved.x + WIDGET_COLLAPSED.w : wa.x + wa.width - 16);
   let bottom = b ? b.y + b.height : (saved.y != null ? saved.y + WIDGET_COLLAPSED.h : wa.y + wa.height - 12);
@@ -107,6 +129,26 @@ function widgetBounds(open) {
   right = Math.min(Math.max(right, disp.x + size.w), disp.x + disp.width);
   bottom = Math.min(Math.max(bottom, disp.y + size.h), disp.y + disp.height);
   return { x: right - size.w, y: bottom - size.h, width: size.w, height: size.h };
+}
+
+/** Moving a window between monitors with different scaling can land it at the wrong size; setting it twice fixes that. */
+function placeWidget(bounds) {
+  widgetWin.setBounds(bounds);
+  const b = widgetWin.getBounds();
+  if (b.width !== bounds.width || b.height !== bounds.height) widgetWin.setBounds(bounds);
+}
+
+/** Recreate the widget if it is missing, and put it back on a monitor that exists. */
+function ensureWidget() {
+  if (quitting) return;
+  if (!widgetWin || widgetWin.isDestroyed()) { createWidget(); return; }
+  const b = widgetWin.getBounds();
+  const onScreen = screen.getAllDisplays().some((d) => {
+    const w = d.workArea;
+    return b.x < w.x + w.width - 40 && b.x + b.width > w.x + 40 && b.y < w.y + w.height - 20 && b.y + b.height > w.y + 20;
+  });
+  if (!onScreen) { log('widget was off-screen (display change); moving it back'); placeWidget(widgetBounds(widgetOpen, true)); }
+  applyWidgetVisibility();
 }
 
 function createWidget() {
@@ -128,13 +170,23 @@ function createWidget() {
     s.y = b.y + b.height - WIDGET_COLLAPSED.h;
     store.save();
   });
-  widgetWin.on('closed', () => { widgetWin = null; });
+  widgetWin.on('closed', () => {
+    widgetWin = null;
+    widgetOpen = false;
+    // Nothing in Tempo closes the widget; if something else did (a driver reset, Alt+F4), bring it back.
+    if (!quitting) { log('widget window closed unexpectedly; recreating'); setTimeout(ensureWidget, 1500); }
+  });
+  widgetWin.webContents.on('render-process-gone', (_e, d) => {
+    log(`widget page gone: ${d.reason}; reloading`);
+    if (!quitting && widgetWin && !widgetWin.isDestroyed()) widgetWin.reload();
+  });
+  widgetWin.webContents.on('did-finish-load', () => log('widget loaded'));
 }
 
 function setWidgetOpen(open) {
   widgetOpen = open;
   if (!widgetWin) return;
-  widgetWin.setBounds(widgetBounds(open));
+  placeWidget(widgetBounds(open));
   send(widgetWin, 'widget:open', open);
   if (open) widgetWin.focus();
 }
@@ -413,6 +465,7 @@ function allowMicForWidget() {
 }
 
 app.whenReady().then(() => {
+  log(`start v${app.getVersion()} ${startedAtLogin ? '(at sign-in)' : '(manual)'} pid=${process.pid}`);
   store.init();
   syncLoginItem();
   registerIpc();
@@ -422,6 +475,11 @@ app.whenReady().then(() => {
   createWidget();
   allowMicForWidget();
   createTray();
+  // Keep the widget alive and on a real screen: re-check every 20s and whenever monitors change.
+  setInterval(ensureWidget, 20000);
+  for (const ev of ['display-added', 'display-removed', 'display-metrics-changed']) {
+    screen.on(ev, () => { log(`screen: ${ev}`); setTimeout(ensureWidget, 1500); });
+  }
   reminders.start(notifyGoals);
   hotkeyErrors = registerHotkeys();
   if (hotkeyErrors.length) {

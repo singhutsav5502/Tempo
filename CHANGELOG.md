@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.1 (2026-09-29)
+
+### Fixed
+- **Tempo could be running but invisible after sign-in.** It launched correctly at sign-in, but the floating widget
+  later disappeared (around graphics-driver resets recorded by Windows) and nothing brought it back, leaving no visible
+  sign that Tempo was running. The widget now recovers on its own: a crashed widget page reloads, a closed widget window
+  is recreated, and every 20 seconds (and on any monitor change) Tempo checks the widget exists and is on a real screen.
+  The calendar page also reloads if it crashes.
+- Moving the widget between monitors with different scaling could shrink it; it keeps its size now.
+
+### Added
+- A diagnostics log at `%APPDATA%	empo	empo.log` (start-up, window crashes and recoveries, monitor changes;
+  capped at 512 KB).
+
 ## v0.2.0 (2026-09-25)
 
 A usability release: everything from the v0.1.0 UX audit (`docs/UX_AUDIT.md`) except two small items, plus a startup fix.
